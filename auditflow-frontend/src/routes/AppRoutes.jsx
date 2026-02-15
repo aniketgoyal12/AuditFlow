@@ -6,6 +6,7 @@ import DashboardPage from '../pages/Workspace/DashboardPage';
 import AuditLogsPage from '../pages/Workspace/AuditLogsPage';
 import NotesPage from '../pages/Workspace/NotesPage';
 import SettingsPage from '../pages/Workspace/SettingsPage';
+import AdminDashboard from '../pages/Workspace/AdminDashboard';
 
 // Auth Pages
 import LoginPage from '../pages/auth/LoginPage';
@@ -17,12 +18,15 @@ const AppRoutes = () => {
         {/* Auth Routes */}
         <Route path="/" element={<LoginPage />} />
 
+        
+        <Route path="/admin" element={<AdminDashboard />} />
         {/* Workspace Routes */}
         <Route element={<AppLayout layoutType="workspace" />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/notepad" element={<NotesPage />} />
           <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          
         </Route>
 
         {/* Redirect unknown routes to login */}

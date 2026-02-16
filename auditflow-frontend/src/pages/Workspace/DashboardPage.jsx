@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { FileText, Activity, Users, TrendingUp, ArrowRight, Clock } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import Card from '../../components/common/Card';
@@ -7,6 +8,7 @@ import Badge from '../../components/common/Badge';
 import Avatar from '../../components/common/Avatar';
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
   const stats = [
     {
       title: 'My Notes',
@@ -67,9 +69,24 @@ const DashboardPage = () => {
   ];
 
   const quickActions = [
-    { label: 'Create New Note', icon: <FileText className="w-5 h-5" />, variant: 'primary' },
-    { label: 'View Audit Logs', icon: <Activity className="w-5 h-5" />, variant: 'outline' },
-    { label: 'Manage Team', icon: <Users className="w-5 h-5" />, variant: 'ghost' },
+    { 
+      label: 'Create New Note', 
+      icon: <FileText className="w-5 h-5" />, 
+      variant: 'primary',
+      onClick: () => navigate('/notepad')
+    },
+    { 
+      label: 'View Audit Logs', 
+      icon: <Activity className="w-5 h-5" />, 
+      variant: 'outline',
+      onClick: () => navigate('/audit-logs')
+    },
+    { 
+      label: 'Manage Team', 
+      icon: <Users className="w-5 h-5" />, 
+      variant: 'ghost',
+      onClick: () => navigate('/settings')
+    },
   ];
 
   const getActionBadge = (type) => {
@@ -152,6 +169,7 @@ const DashboardPage = () => {
                   <Button 
                     variant={action.variant}
                     leftIcon={action.icon}
+                    onClick={action.onClick}
                   >
                     {action.label}
                   </Button>
@@ -174,7 +192,12 @@ const DashboardPage = () => {
             title="Recent Activity"
             subtitle="Latest updates from your team"
             action={
-              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                rightIcon={<ArrowRight className="w-4 h-4" />}
+                onClick={() => navigate('/audit-logs')}
+              >
                 View All
               </Button>
             }

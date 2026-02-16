@@ -13,6 +13,36 @@ const AuditLogsPage = () => {
   const [filterAction, setFilterAction] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
 
+  const handleExportLogs = () => {
+    console.log('Exporting audit logs...');
+    // Create CSV content
+    const headers = ['User', 'Action', 'Summary', 'Target', 'Timestamp', 'IP Address'];
+    const csvContent = [
+      headers.join(','),
+      ...auditLogs.map(log => [
+        log.user.name,
+        log.action,
+        `"${log.summary}"`,
+        log.target,
+        log.timestamp,
+        log.ip
+      ].join(','))
+    ].join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDateRangeClick = () => {
+    alert('Date range picker would be implemented here');
+  };
+
   const auditLogs = [
     {
       id: 1,
@@ -101,6 +131,7 @@ const AuditLogsPage = () => {
         <Button 
           variant="outline"
           leftIcon={<Download className="w-5 h-5" />}
+          onClick={handleExportLogs}
         >
           Export Logs
         </Button>
@@ -136,6 +167,7 @@ const AuditLogsPage = () => {
             <Button 
               variant="outline"
               leftIcon={<Calendar className="w-5 h-5" />}
+              onClick={handleDateRangeClick}
             >
               Date Range
             </Button>

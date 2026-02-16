@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -14,7 +15,9 @@ import {
 import Avatar from '../common/Avatar';
 
 const AppHeader = ({ onToggleSidebar }) => {
+  const navigate = useNavigate();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -26,6 +29,28 @@ const AppHeader = ({ onToggleSidebar }) => {
   ];
 
   const unreadCount = notifications.filter(n => n.unread).length;
+
+  const handleSearch = (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      console.log('Searching for:', searchQuery);
+      // Implement search functionality
+    }
+  };
+
+  const handleLogout = () => {
+    console.log('Logging out...');
+    navigate('/');
+  };
+
+  const handleProfileClick = () => {
+    setShowUserMenu(false);
+    navigate('/settings');
+  };
+
+  const handleSettingsClick = () => {
+    setShowUserMenu(false);
+    navigate('/settings');
+  };
 
   return (
     <header className="h-16 bg-white border-b border-neutral-200 px-6 flex items-center justify-between relative z-10">
@@ -54,6 +79,9 @@ const AppHeader = ({ onToggleSidebar }) => {
           <input
             type="text"
             placeholder="Search audits, notes, members..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearch}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setIsSearchFocused(false)}
             className={`
@@ -204,18 +232,27 @@ const AppHeader = ({ onToggleSidebar }) => {
                   </div>
                   
                   <div className="p-2">
-                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 rounded-lg transition-colors">
+                    <button 
+                      onClick={handleProfileClick}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 rounded-lg transition-colors"
+                    >
                       <UserIcon className="w-4 h-4" />
                       Profile
                     </button>
-                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 rounded-lg transition-colors">
+                    <button 
+                      onClick={handleSettingsClick}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 rounded-lg transition-colors"
+                    >
                       <Settings className="w-4 h-4" />
                       Settings
                     </button>
                   </div>
 
                   <div className="p-2 border-t border-neutral-200">
-                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-error-600 hover:bg-error-50 rounded-lg transition-colors">
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-error-600 hover:bg-error-50 rounded-lg transition-colors"
+                    >
                       <LogOut className="w-4 h-4" />
                       Sign out
                     </button>

@@ -24,6 +24,7 @@ const NotesPage = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showNewNoteModal, setShowNewNoteModal] = useState(false);
   const [selectedNote, setSelectedNote] = useState(null);
+  const [editingNote, setEditingNote] = useState(null);
   const [notes, setNotes] = useState([
     {
       id: 1,
@@ -111,11 +112,50 @@ const NotesPage = () => {
   });
 
   const handleDeleteNote = (noteId) => {
-    setNotes(notes.filter(note => note.id !== noteId));
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      setNotes(notes.filter(note => note.id !== noteId));
+      console.log('Deleted note:', noteId);
+    }
+  };
+
+  const handleCreateNote = (newNote) => {
+    const note = {
+      id: Date.now(),
+      ...newNote,
+      owner: 'Sarah Chen',
+      role: 'Owner',
+      lastModified: 'Just now',
+      collaborators: 1,
+    };
+    setNotes([note, ...notes]);
+    setShowNewNoteModal(false);
+    console.log('Created note:', note);
+  };
+
+  const handleUpdateNote = (updatedNote) => {
+    setNotes(notes.map(note => 
+      note.id === updatedNote.id 
+        ? { ...note, ...updatedNote, lastModified: 'Just now' }
+        : note
+    ));
+    setEditingNote(null);
+    setSelectedNote(null);
+    console.log('Updated note:', updatedNote);
   };
 
   const NoteCard = ({ note }) => {
     const [showMenu, setShowMenu] = useState(false);
+
+    const colorClasses = {
+      primary: { bg: 'bg-blue-100', text: 'text-blue-600', bar: 'bg-blue-500' },
+      error: { bg: 'bg-red-100', text: 'text-red-600', bar: 'bg-red-500' },
+      warning: { bg: 'bg-yellow-100', text: 'text-yellow-600', bar: 'bg-yellow-500' },
+      success: { bg: 'bg-green-100', text: 'text-green-600', bar: 'bg-green-500' },
+      purple: { bg: 'bg-purple-100', text: 'text-purple-600', bar: 'bg-purple-500' },
+      info: { bg: 'bg-cyan-100', text: 'text-cyan-600', bar: 'bg-cyan-500' },
+    };
+
+    const colors = colorClasses[note.color] || colorClasses.primary;
 
     return (
       <motion.div
@@ -133,13 +173,13 @@ const NotesPage = () => {
           onClick={() => setSelectedNote(note)}
         >
           {/* Color Bar */}
-          <div className={`absolute top-0 left-0 right-0 h-1 bg-${note.color}-500 rounded-t-2xl`} />
+          <div className={`absolute top-0 left-0 right-0 h-1 ${colors.bar} rounded-t-2xl`} />
 
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-start gap-3 flex-1">
-              <div className={`w-10 h-10 bg-${note.color}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                <FileText className={`w-5 h-5 text-${note.color}-600`} />
+              <div className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                <FileText className={`w-5 h-5 ${colors.text}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-lg text-neutral-900 truncate mb-1">
@@ -151,22 +191,27 @@ const NotesPage = () => {
               </div>
             </div>
 
-            {/* Menu */}
+            {/* Actions Menu */}
             <div className="relative">
-              <button
+              <motion.button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowMenu(!showMenu);
                 }}
-                className="p-1 hover:bg-neutral-100 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                className="p-2 hover:bg-neutral-100 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
               >
-                <MoreVertical className="w-5 h-5 text-neutral-600" />
-              </button>
+                <MoreVertical className="w-4 h-4 text-neutral-600" />
+              </motion.button>
 
               <AnimatePresence>
                 {showMenu && (
                   <>
-                    <div
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
                       className="fixed inset-0 z-10"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -174,16 +219,15 @@ const NotesPage = () => {
                       }}
                     />
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                      className="absolute right-0 top-8 w-40 bg-white rounded-xl shadow-large border border-neutral-200 overflow-hidden z-20"
-                      onClick={(e) => e.stopPropagation()}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="absolute right-0 top-full mt-2 w-40 bg-white rounded-xl shadow-large border border-neutral-200 overflow-hidden z-20"
                     >
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedNote(note);
+                          setEditingNote(note);
                           setShowMenu(false);
                         }}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
@@ -253,9 +297,32 @@ const NotesPage = () => {
     );
   };
 
-  const NoteEditorModal = () => {
-    const [title, setTitle] = useState(selectedNote?.title || '');
-    const [content, setContent] = useState(selectedNote?.content || '');
+  const NoteEditorModal = ({ note, onClose, onSave }) => {
+    const [title, setTitle] = useState(note?.title || '');
+    const [content, setContent] = useState(note?.content || '');
+    const [tagsInput, setTagsInput] = useState(note?.tags?.join(', ') || '');
+    const [selectedColor, setSelectedColor] = useState(note?.color || 'primary');
+
+    const handleSave = () => {
+      const tags = tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag);
+      const noteData = {
+        ...(note || {}),
+        title,
+        content,
+        tags,
+        color: selectedColor,
+      };
+      onSave(noteData);
+    };
+
+    const colors = [
+      { value: 'primary', label: 'Blue', class: 'bg-blue-500' },
+      { value: 'error', label: 'Red', class: 'bg-red-500' },
+      { value: 'warning', label: 'Yellow', class: 'bg-yellow-500' },
+      { value: 'success', label: 'Green', class: 'bg-green-500' },
+      { value: 'purple', label: 'Purple', class: 'bg-purple-500' },
+      { value: 'info', label: 'Cyan', class: 'bg-cyan-500' },
+    ];
 
     return (
       <motion.div
@@ -263,7 +330,7 @@ const NotesPage = () => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        onClick={() => setSelectedNote(null)}
+        onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -275,10 +342,10 @@ const NotesPage = () => {
           {/* Modal Header */}
           <div className="flex items-center justify-between p-6 border-b border-neutral-200">
             <h2 className="text-2xl font-bold font-display text-neutral-900">
-              {selectedNote ? 'Edit Note' : 'New Note'}
+              {note ? 'Edit Note' : 'New Note'}
             </h2>
             <button
-              onClick={() => setSelectedNote(null)}
+              onClick={onClose}
               className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-neutral-600" />
@@ -303,19 +370,40 @@ const NotesPage = () => {
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  placeholder="Start typing your note..."
-                  className="w-full h-64 px-4 py-3 rounded-xl border-2 border-neutral-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all resize-none"
+                  placeholder="Start writing your note..."
+                  className="w-full h-48 px-4 py-3 rounded-xl border-2 border-neutral-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all resize-none"
                 />
               </div>
 
+              <Input
+                label="Tags (comma separated)"
+                placeholder="e.g., Compliance, Q4, Important"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+              />
+
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Tags
+                <label className="block text-sm font-medium text-neutral-700 mb-3">
+                  Color Theme
                 </label>
-                <Input
-                  placeholder="Add tags (comma separated)..."
-                  leftIcon={<Tag className="w-5 h-5" />}
-                />
+                <div className="grid grid-cols-6 gap-3">
+                  {colors.map((color) => (
+                    <button
+                      key={color.value}
+                      onClick={() => setSelectedColor(color.value)}
+                      className={`
+                        w-full aspect-square rounded-xl ${color.class}
+                        transition-all duration-200
+                        ${selectedColor === color.value 
+                          ? 'ring-4 ring-offset-2 ring-neutral-900 scale-110' 
+                          : 'hover:scale-105'
+                        }
+                      `}
+                    >
+                      <span className="sr-only">{color.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -324,16 +412,138 @@ const NotesPage = () => {
           <div className="flex items-center justify-end gap-3 p-6 border-t border-neutral-200">
             <Button
               variant="ghost"
-              onClick={() => setSelectedNote(null)}
+              onClick={onClose}
             >
               Cancel
             </Button>
             <Button
               variant="gradient"
               leftIcon={<Save className="w-5 h-5" />}
+              onClick={handleSave}
+              disabled={!title.trim() || !content.trim()}
             >
-              Save Note
+              {note ? 'Save Changes' : 'Create Note'}
             </Button>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  };
+
+  const NoteViewModal = ({ note, onClose, onEdit }) => {
+    const colorClasses = {
+      primary: { bg: 'bg-blue-100', text: 'text-blue-600', bar: 'bg-blue-500' },
+      error: { bg: 'bg-red-100', text: 'text-red-600', bar: 'bg-red-500' },
+      warning: { bg: 'bg-yellow-100', text: 'text-yellow-600', bar: 'bg-yellow-500' },
+      success: { bg: 'bg-green-100', text: 'text-green-600', bar: 'bg-green-500' },
+      purple: { bg: 'bg-purple-100', text: 'text-purple-600', bar: 'bg-purple-500' },
+      info: { bg: 'bg-cyan-100', text: 'text-cyan-600', bar: 'bg-cyan-500' },
+    };
+
+    const colors = colorClasses[note.color] || colorClasses.primary;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="bg-white rounded-2xl shadow-large w-full max-w-3xl max-h-[90vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Color Bar */}
+          <div className={`h-2 ${colors.bar}`} />
+
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-6 border-b border-neutral-200">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 ${colors.bg} rounded-xl flex items-center justify-center`}>
+                <FileText className={`w-6 h-6 ${colors.text}`} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold font-display text-neutral-900">
+                  {note.title}
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="default" size="sm">{note.role}</Badge>
+                  <span className="text-sm text-neutral-500">by {note.owner}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {note.role !== 'Read Only' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Edit className="w-4 h-4" />}
+                  onClick={() => {
+                    onEdit(note);
+                    onClose();
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-neutral-600" />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Content */}
+          <div className="p-6 overflow-y-auto max-h-[calc(90vh-280px)]">
+            <div className="prose max-w-none">
+              <p className="text-neutral-700 leading-relaxed whitespace-pre-wrap">
+                {note.content}
+              </p>
+            </div>
+
+            {/* Tags */}
+            {note.tags && note.tags.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-neutral-200">
+                <h3 className="text-sm font-semibold text-neutral-900 mb-3">Tags</h3>
+                <div className="flex flex-wrap gap-2">
+                  {note.tags.map((tag, index) => (
+                    <Badge key={index} variant="default">
+                      <Tag className="w-3 h-3" />
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between p-6 border-t border-neutral-200 bg-neutral-50">
+            <div className="flex items-center gap-4 text-sm text-neutral-600">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>Last modified {note.lastModified}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {[...Array(Math.min(note.collaborators, 3))].map((_, i) => (
+                    <Avatar
+                      key={i}
+                      name={`User ${i + 1}`}
+                      size="sm"
+                      variant="gradient"
+                    />
+                  ))}
+                </div>
+                <span>{note.collaborators} collaborator{note.collaborators !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -343,162 +553,112 @@ const NotesPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-      >
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold font-display text-neutral-900 mb-2">
-            My Notes
-          </h1>
-          <p className="text-lg text-neutral-600">
-            Create, organize, and collaborate on your documents
+          <h1 className="text-4xl font-bold font-display text-neutral-900">Notepad</h1>
+          <p className="text-lg text-neutral-600 mt-1">
+            Manage your audit notes and documentation
           </p>
         </div>
-
         <Button
           variant="gradient"
+          size="lg"
           leftIcon={<Plus className="w-5 h-5" />}
           onClick={() => setShowNewNoteModal(true)}
         >
           New Note
         </Button>
-      </motion.div>
+      </div>
 
-      {/* Stats Cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-      >
-        <Card variant="glass" padding="default" hover={false}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600 mb-1">Total Notes</p>
-              <p className="text-3xl font-bold font-display text-neutral-900">
-                {notes.length}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-              <FileText className="w-6 h-6 text-primary-600" />
-            </div>
+      {/* Filters and Search */}
+      <Card variant="default" padding="default">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <Input
+              type="text"
+              placeholder="Search notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              leftIcon={<Search className="w-5 h-5" />}
+            />
           </div>
-        </Card>
-
-        <Card variant="glass" padding="default" hover={false}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600 mb-1">Owned by Me</p>
-              <p className="text-3xl font-bold font-display text-neutral-900">
-                {notes.filter(n => n.role === 'Owner').length}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-success-100 rounded-xl flex items-center justify-center">
-              <Edit className="w-6 h-6 text-success-600" />
-            </div>
+          <div className="flex gap-2">
+            {filters.map((filter) => (
+              <Button
+                key={filter.value}
+                variant={selectedFilter === filter.value ? 'primary' : 'outline'}
+                size="md"
+                onClick={() => setSelectedFilter(filter.value)}
+              >
+                {filter.label} ({filter.count})
+              </Button>
+            ))}
           </div>
-        </Card>
-
-        <Card variant="glass" padding="default" hover={false}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600 mb-1">Shared with Me</p>
-              <p className="text-3xl font-bold font-display text-neutral-900">
-                {notes.filter(n => n.role !== 'Owner').length}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-warning-100 rounded-xl flex items-center justify-center">
-              <FileText className="w-6 h-6 text-warning-600" />
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Search and Filters */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <Card variant="glass" padding="default">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Search notes by title or content..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                leftIcon={<Search className="w-5 h-5" />}
-              />
-            </div>
-            <div className="flex gap-2">
-              {filters.map((filter) => (
-                <button
-                  key={filter.value}
-                  onClick={() => setSelectedFilter(filter.value)}
-                  className={`
-                    px-4 py-2 rounded-xl text-sm font-medium transition-all
-                    ${selectedFilter === filter.value
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'bg-white text-neutral-600 hover:bg-neutral-50'
-                    }
-                  `}
-                >
-                  {filter.label}
-                  <span className={`ml-2 ${
-                    selectedFilter === filter.value ? 'text-white/80' : 'text-neutral-400'
-                  }`}>
-                    ({filter.count})
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </Card>
-      </motion.div>
+        </div>
+      </Card>
 
       {/* Notes Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
+      <AnimatePresence mode="popLayout">
         {filteredNotes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence mode="popLayout">
-              {filteredNotes.map((note) => (
-                <NoteCard key={note.id} note={note} />
-              ))}
-            </AnimatePresence>
+            {filteredNotes.map((note) => (
+              <NoteCard key={note.id} note={note} />
+            ))}
           </div>
         ) : (
-          <Card variant="default" padding="lg">
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="w-8 h-8 text-neutral-400" />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+          >
+            <Card variant="default" padding="lg">
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-neutral-900 mb-2">
+                  No notes found
+                </h3>
+                <p className="text-neutral-600 mb-6">
+                  {searchQuery 
+                    ? 'Try adjusting your search or filters'
+                    : 'Create your first note to get started'}
+                </p>
+                {!searchQuery && (
+                  <Button
+                    variant="primary"
+                    leftIcon={<Plus className="w-5 h-5" />}
+                    onClick={() => setShowNewNoteModal(true)}
+                  >
+                    Create Your First Note
+                  </Button>
+                )}
               </div>
-              <h3 className="text-lg font-semibold text-neutral-900 mb-2">
-                No notes found
-              </h3>
-              <p className="text-neutral-600 mb-4">
-                {searchQuery ? 'Try adjusting your search' : 'Create your first note to get started'}
-              </p>
-              <Button
-                variant="primary"
-                leftIcon={<Plus className="w-5 h-5" />}
-                onClick={() => setShowNewNoteModal(true)}
-              >
-                Create Note
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
 
-      {/* Note Editor Modal */}
+      {/* Modals */}
       <AnimatePresence>
-        {(selectedNote || showNewNoteModal) && <NoteEditorModal />}
+        {showNewNoteModal && (
+          <NoteEditorModal
+            onClose={() => setShowNewNoteModal(false)}
+            onSave={handleCreateNote}
+          />
+        )}
+        {editingNote && (
+          <NoteEditorModal
+            note={editingNote}
+            onClose={() => setEditingNote(null)}
+            onSave={handleUpdateNote}
+          />
+        )}
+        {selectedNote && !editingNote && (
+          <NoteViewModal
+            note={selectedNote}
+            onClose={() => setSelectedNote(null)}
+            onEdit={setEditingNote}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

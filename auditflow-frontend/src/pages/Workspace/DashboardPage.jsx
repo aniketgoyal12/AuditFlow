@@ -81,12 +81,7 @@ const DashboardPage = () => {
       variant: 'outline',
       onClick: () => navigate('/audit-logs')
     },
-    { 
-      label: 'Manage Team', 
-      icon: <Users className="w-5 h-5" />, 
-      variant: 'ghost',
-      onClick: () => navigate('/settings')
-    },
+    
   ];
 
   const getActionBadge = (type) => {

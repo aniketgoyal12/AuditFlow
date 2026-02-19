@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Users, 
-  FileText, 
-  Activity, 
-  TrendingUp, 
+import {
+  Users,
+  FileText,
+  Activity,
+  TrendingUp,
   TrendingDown,
   Eye,
   Clock,
@@ -52,6 +52,9 @@ const AdminDashboard = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [activitySearch, setActivitySearch] = useState('');
+  const [actionFilter, setActionFilter] = useState('All Actions');
+  const [statusFilter, setStatusFilter] = useState('All Status');
   const navigate = useNavigate();
 
   const overviewStats = [
@@ -105,61 +108,61 @@ const AdminDashboard = () => {
   ];
 
   const users = [
-    { 
-      id: 1, 
-      name: 'Sarah Chen', 
+    {
+      id: 1,
+      name: 'Sarah Chen',
       email: 'sarah@company.com',
-      role: 'Admin', 
+      role: 'Admin',
       status: 'active',
-      notes: 234, 
+      notes: 234,
       lastActive: '2 min ago',
       joined: '2023-01-15',
       location: 'New York, US',
       avatar: null
     },
-    { 
-      id: 2, 
-      name: 'Maria Garcia', 
+    {
+      id: 2,
+      name: 'Maria Garcia',
       email: 'maria@company.com',
-      role: 'Editor', 
+      role: 'Editor',
       status: 'active',
-      notes: 187, 
+      notes: 187,
       lastActive: '5 min ago',
       joined: '2023-03-22',
       location: 'Madrid, Spain',
       avatar: null
     },
-    { 
-      id: 3, 
-      name: 'James Wilson', 
+    {
+      id: 3,
+      name: 'James Wilson',
       email: 'james@company.com',
-      role: 'Editor', 
+      role: 'Editor',
       status: 'inactive',
-      notes: 156, 
+      notes: 156,
       lastActive: '2 days ago',
       joined: '2023-02-10',
       location: 'London, UK',
       avatar: null
     },
-    { 
-      id: 4, 
-      name: 'Alex Thompson', 
+    {
+      id: 4,
+      name: 'Alex Thompson',
       email: 'alex@company.com',
-      role: 'User', 
+      role: 'User',
       status: 'active',
-      notes: 142, 
+      notes: 142,
       lastActive: '1 hour ago',
       joined: '2023-04-05',
       location: 'Toronto, Canada',
       avatar: null
     },
-    { 
-      id: 5, 
-      name: 'Emma Davis', 
+    {
+      id: 5,
+      name: 'Emma Davis',
       email: 'emma@company.com',
-      role: 'User', 
+      role: 'User',
       status: 'suspended',
-      notes: 128, 
+      notes: 128,
       lastActive: '1 week ago',
       joined: '2023-05-12',
       location: 'Sydney, Australia',
@@ -405,16 +408,14 @@ const AdminDashboard = () => {
                           {notifications.map((notif) => (
                             <div
                               key={notif.id}
-                              className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                                notif.unread ? 'bg-blue-50/50' : ''
-                              }`}
+                              className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors ${notif.unread ? 'bg-blue-50/50' : ''
+                                }`}
                             >
                               <div className="flex items-start gap-3">
-                                <div className={`w-2 h-2 rounded-full mt-2 ${
-                                  notif.type === 'error' ? 'bg-red-500' :
-                                  notif.type === 'warning' ? 'bg-yellow-500' :
-                                  notif.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
-                                }`}></div>
+                                <div className={`w-2 h-2 rounded-full mt-2 ${notif.type === 'error' ? 'bg-red-500' :
+                                    notif.type === 'warning' ? 'bg-yellow-500' :
+                                      notif.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+                                  }`}></div>
                                 <div className="flex-1">
                                   <p className="text-sm text-gray-900">{notif.message}</p>
                                   <p className="text-xs text-gray-500 mt-1">{notif.time}</p>
@@ -490,11 +491,10 @@ const AdminDashboard = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
-                activeTab === tab
+              className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${activeTab === tab
                   ? 'bg-white text-indigo-600 shadow-md'
                   : 'text-gray-600 hover:bg-white/50'
-              }`}
+                }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
@@ -516,15 +516,14 @@ const AdminDashboard = () => {
                 >
                   <div className="relative overflow-hidden bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
                     <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.gradient} opacity-10 rounded-full -mr-16 -mt-16`}></div>
-                    
+
                     <div className="relative">
                       <div className="flex items-start justify-between mb-4">
                         <div className={`w-14 h-14 bg-gradient-to-br ${stat.gradient} rounded-2xl flex items-center justify-center shadow-lg`}>
                           <div className="text-white">{stat.icon}</div>
                         </div>
-                        <div className={`flex items-center gap-1 px-3 py-1.5 rounded-xl ${
-                          stat.trend === 'up' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                        }`}>
+                        <div className={`flex items-center gap-1 px-3 py-1.5 rounded-xl ${stat.trend === 'up' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                          }`}>
                           {stat.trend === 'up' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                           <span className="text-sm font-bold">{stat.change}</span>
                         </div>
@@ -702,7 +701,7 @@ const AdminDashboard = () => {
                 <h2 className="text-2xl font-bold text-gray-900">Audit Logs</h2>
                 <p className="text-gray-600">Complete activity tracking and compliance monitoring</p>
               </div>
-              
+
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-gray-200">
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -794,11 +793,17 @@ const AdminDashboard = () => {
                   <input
                     type="text"
                     placeholder="Search logs..."
+                    value={activitySearch}
+                    onChange={(e) => setActivitySearch(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                   />
                 </div>
 
-                <select className="px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all bg-white">
+                <select
+                  value={actionFilter}
+                  onChange={(e) => setActionFilter(e.target.value)}
+                  className="px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all bg-white"
+                >
                   <option>All Actions</option>
                   <option>Create</option>
                   <option>Edit</option>
@@ -807,7 +812,11 @@ const AdminDashboard = () => {
                   <option>Share</option>
                 </select>
 
-                <select className="px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all bg-white">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all bg-white"
+                >
                   <option>All Status</option>
                   <option>Success</option>
                   <option>Failed</option>
@@ -939,7 +948,21 @@ const AdminDashboard = () => {
                         ip: '45.123.67.89',
                         location: 'Unknown'
                       }
-                    ].map((log, index) => (
+                    ].filter(log => {
+                      const matchesSearch =
+                        log.user.toLowerCase().includes(activitySearch.toLowerCase()) ||
+                        log.target.toLowerCase().includes(activitySearch.toLowerCase()) ||
+                        log.actionLabel.toLowerCase().includes(activitySearch.toLowerCase());
+
+                      const matchesAction = actionFilter === 'All Actions' ||
+                        log.actionLabel.toLowerCase().includes(actionFilter.toLowerCase()) ||
+                        log.action === actionFilter.toLowerCase();
+
+                      const matchesStatus = statusFilter === 'All Status' ||
+                        log.status === statusFilter.toLowerCase();
+
+                      return matchesSearch && matchesAction && matchesStatus;
+                    }).map((log, index) => (
                       <motion.tr
                         key={index}
                         initial={{ opacity: 0, x: -20 }}
@@ -960,14 +983,14 @@ const AdminDashboard = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <Badge 
+                          <Badge
                             variant={
                               log.action === 'create' ? 'success' :
-                              log.action === 'edit' ? 'info' :
-                              log.action === 'delete' ? 'danger' :
-                              log.action === 'share' ? 'primary' :
-                              log.action === 'login' ? 'warning' :
-                              'default'
+                                log.action === 'edit' ? 'info' :
+                                  log.action === 'delete' ? 'danger' :
+                                    log.action === 'share' ? 'primary' :
+                                      log.action === 'login' ? 'warning' :
+                                        'default'
                             }
                             size="sm"
                           >
@@ -978,7 +1001,7 @@ const AdminDashboard = () => {
                           <span className="text-sm text-gray-900">{log.target}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <Badge 
+                          <Badge
                             variant={log.status === 'success' ? 'success' : 'danger'}
                             size="sm"
                             className="flex items-center gap-1 w-fit"

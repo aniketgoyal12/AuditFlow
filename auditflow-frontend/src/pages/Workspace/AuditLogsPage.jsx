@@ -127,8 +127,8 @@ const AuditLogsPage = () => {
             Track all activities and changes in your workspace
           </p>
         </div>
-        
-        <Button 
+
+        <Button
           variant="outline"
           leftIcon={<Download className="w-5 h-5" />}
           onClick={handleExportLogs}
@@ -164,7 +164,7 @@ const AuditLogsPage = () => {
               ))}
             </select>
 
-            <Button 
+            <Button
               variant="outline"
               leftIcon={<Calendar className="w-5 h-5" />}
               onClick={handleDateRangeClick}
@@ -207,56 +207,67 @@ const AuditLogsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {auditLogs.map((log, index) => (
-                  <motion.tr
-                    key={log.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + index * 0.05 }}
-                    className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar 
-                          name={log.user.name} 
+                {auditLogs
+                  .filter(log => {
+                    const matchesSearch =
+                      log.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      log.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      log.target.toLowerCase().includes(searchQuery.toLowerCase());
+
+                    const matchesAction = filterAction === 'all' || log.action === filterAction;
+
+                    return matchesSearch && matchesAction;
+                  })
+                  .map((log, index) => (
+                    <motion.tr
+                      key={log.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + index * 0.05 }}
+                      className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar
+                            name={log.user.name}
+                            size="sm"
+                            variant="gradient"
+                          />
+                          <span className="text-sm font-medium text-neutral-900">
+                            {log.user.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge
+                          variant={getActionBadge(log.action).variant}
                           size="sm"
-                          variant="gradient"
-                        />
-                        <span className="text-sm font-medium text-neutral-900">
-                          {log.user.name}
+                        >
+                          {getActionBadge(log.action).label}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-neutral-700">
+                          {log.summary}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge 
-                        variant={getActionBadge(log.action).variant}
-                        size="sm"
-                      >
-                        {getActionBadge(log.action).label}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-neutral-700">
-                        {log.summary}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge variant="default" size="sm">
-                        {log.target}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-neutral-600">
-                        {log.timestamp}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs text-neutral-500 font-mono">
-                        {log.ip}
-                      </span>
-                    </td>
-                  </motion.tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge variant="default" size="sm">
+                          {log.target}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-neutral-600">
+                          {log.timestamp}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs text-neutral-500 font-mono">
+                          {log.ip}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  ))}
               </tbody>
             </table>
           </div>

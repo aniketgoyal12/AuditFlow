@@ -10,6 +10,7 @@ import AdminDashboard from '../pages/Workspace/AdminDashboard';
 
 // Auth Pages
 import LoginPage from '../pages/auth/LoginPage';
+import SignupPage from '../pages/auth/SignupPage';
 
 const AppRoutes = () => {
   return (
@@ -17,8 +18,9 @@ const AppRoutes = () => {
       <Routes>
         {/* Auth Routes */}
         <Route path="/" element={<LoginPage />} />
+        <Route path="/register" element={<SignupPage />} />
 
-        
+
         <Route path="/admin" element={<AdminDashboard />} />
         {/* Workspace Routes */}
         <Route element={<AppLayout layoutType="workspace" />}>
@@ -26,7 +28,7 @@ const AppRoutes = () => {
           <Route path="/notepad" element={<NotesPage />} />
           <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          
+
         </Route>
 
         {/* Redirect unknown routes to login */}

@@ -11,6 +11,13 @@ const parseOrigins = (value = "") =>
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+const DEFAULT_DEV_CLIENT_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
 const getNodeEnv = () => process.env.NODE_ENV || "development";
 const getDefaultMongoUri = (nodeEnv) =>
   nodeEnv === "production" ? "" : "mongodb://127.0.0.1:27017/auditVault";
@@ -26,6 +33,18 @@ const getDefaultJwtSecret = (nodeEnv) => {
   return "auditflow-local-dev-secret";
 };
 
+const getClientOrigins = (nodeEnv) => {
+  const configuredOrigins = parseOrigins(
+    [process.env.CLIENT_URL, process.env.CLIENT_ORIGINS].filter(Boolean).join(",")
+  );
+
+  if (configuredOrigins.length > 0) {
+    return configuredOrigins;
+  }
+
+  return nodeEnv === "production" ? [] : DEFAULT_DEV_CLIENT_ORIGINS;
+};
+
 const getEnv = () => {
   const nodeEnv = getNodeEnv();
 
@@ -37,9 +56,7 @@ const getEnv = () => {
     mongoUri: process.env.MONGO_URI || getDefaultMongoUri(nodeEnv),
     jwtSecret: process.env.JWT_SECRET || getDefaultJwtSecret(nodeEnv),
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || "12h",
-    clientOrigins: parseOrigins(
-      process.env.CLIENT_URL || process.env.CLIENT_ORIGINS || "http://localhost:3000"
-    ),
+    clientOrigins: getClientOrigins(nodeEnv),
     authMaxAttempts: Number(process.env.AUTH_MAX_ATTEMPTS || 5),
     authLockMinutes: Number(process.env.AUTH_LOCK_MINUTES || 15),
     logLevel: process.env.LOG_LEVEL || "info",

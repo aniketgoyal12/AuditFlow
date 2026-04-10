@@ -11,7 +11,8 @@ vi.mock('../../lib/api', () => ({
     deleteNote: vi.fn(),
     shareNote: vi.fn(),
   },
-  API_BASE_URL: 'http://localhost:5000/api',
+  API_URL: 'https://auditflow-g54b.onrender.com',
+  API_BASE_URL: 'https://auditflow-g54b.onrender.com/api',
 }));
 
 const renderWithAuth = (ui) =>

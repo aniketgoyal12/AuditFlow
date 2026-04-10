@@ -8,7 +8,8 @@ vi.mock('../../lib/api', () => ({
   api: {
     register: vi.fn(),
   },
-  API_BASE_URL: 'http://localhost:5000/api',
+  API_URL: 'https://auditflow-g54b.onrender.com',
+  API_BASE_URL: 'https://auditflow-g54b.onrender.com/api',
 }));
 
 describe('SignupPage', () => {

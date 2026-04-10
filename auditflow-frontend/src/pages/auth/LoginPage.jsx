@@ -1,27 +1,48 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from '../../lib/motion';
 import { Mail, Lock, ArrowRight, Shield, Sparkles } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import { api } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuth';
+
+const quickCredentials = [
+  {
+    label: 'Admin',
+    email: import.meta.env.VITE_DEMO_ADMIN_EMAIL,
+    password: import.meta.env.VITE_DEMO_ADMIN_PASSWORD,
+  },
+  {
+    label: 'User',
+    email: import.meta.env.VITE_DEMO_USER_EMAIL,
+    password: import.meta.env.VITE_DEMO_USER_PASSWORD,
+  },
+].filter((credential) => credential.email && credential.password);
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { setSession } = useAuth();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError('');
+
+    try {
+      const response = await api.login({ email, password, rememberMe });
+      setSession({ ...response.data, rememberMe });
+      navigate(response.data.user.role === 'Admin' ? '/admin' : '/dashboard');
+    } catch (apiError) {
+      setError(apiError.message);
+    } finally {
       setIsLoading(false);
-      console.log('Login:', { email, password, rememberMe });
-      // Navigate to dashboard after successful login
-      navigate('/dashboard');
-    }, 1500);
+    }
   };
 
   const floatingShapes = [
@@ -181,6 +202,38 @@ const LoginPage = () => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
+              {quickCredentials.length > 0 ? (
+                <div className="rounded-2xl border border-primary-100 bg-primary-50/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-primary-900 mb-2">
+                    Quick Fill Credentials
+                  </p>
+                  <div className="space-y-2">
+                    {quickCredentials.map((credential) => (
+                      <button
+                        key={credential.label}
+                        type="button"
+                        onClick={() => {
+                          setEmail(credential.email);
+                          setPassword(credential.password);
+                        }}
+                        className="w-full rounded-xl bg-white/80 px-3 py-2 text-left text-sm text-primary-900 hover:bg-white transition-colors"
+                      >
+                        {credential.label}: {credential.email}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-primary-100 bg-primary-50/70 px-4 py-3 text-sm text-primary-900">
+                  No demo credentials are configured for this environment. Create an account from the
+                  registration page, then sign in with those credentials.
+                </div>
+              )}
+              {error && (
+                <div className="rounded-2xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+                  {error}
+                </div>
+              )}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -228,13 +281,7 @@ const LoginPage = () => {
                   />
                   <span className="text-sm text-neutral-600">Remember me</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => alert('Password reset functionality would be implemented here')}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  Forgot password?
-                </button>
+                <span className="text-sm text-neutral-500">Use your registered credentials to sign in.</span>
               </motion.div>
 
               <motion.div

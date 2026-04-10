@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { User } from 'lucide-react';
+import { memo } from 'react';
+import { motion } from '../../lib/motion';
 
 const Avatar = ({ 
   name = 'User',
@@ -71,7 +71,10 @@ const Avatar = ({
         {src ? (
           <img 
             src={src} 
-            alt={name} 
+            alt={name}
+            loading="lazy"
+            decoding="async"
+            draggable="false"
             className="w-full h-full object-cover"
           />
         ) : (
@@ -102,4 +105,7 @@ const Avatar = ({
   );
 };
 
-export default Avatar;
+const MemoizedAvatar = memo(Avatar);
+MemoizedAvatar.displayName = 'Avatar';
+
+export default MemoizedAvatar;

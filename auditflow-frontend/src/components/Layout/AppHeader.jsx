@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '../../lib/motion';
 import {
   Search,
   Bell,
   Moon,
   Sun,
-  Menu,
   ChevronDown,
   LogOut,
   User as UserIcon,
@@ -15,6 +14,14 @@ import {
   PanelLeft
 } from 'lucide-react';
 import Avatar from '../common/Avatar';
+import { useAuth } from '../../hooks/useAuth';
+import { api } from '../../lib/api';
+
+const notifications = [
+  { id: 1, title: 'New audit log entry', time: '5m ago', unread: true },
+  { id: 2, title: 'Sarah Chen updated Q4 Report', time: '1h ago', unread: true },
+  { id: 3, title: 'System maintenance scheduled', time: '2h ago', unread: false },
+];
 
 const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
   const navigate = useNavigate();
@@ -22,17 +29,52 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { user, token, clearSession, updateUser } = useAuth();
 
-  const notifications = [
-    { id: 1, title: 'New audit log entry', time: '5m ago', unread: true },
-    { id: 2, title: 'Sarah Chen updated Q4 Report', time: '1h ago', unread: true },
-    { id: 3, title: 'System maintenance scheduled', time: '2h ago', unread: false },
-  ];
+  const unreadCount = notifications.filter((notification) => notification.unread).length;
+  const currentTheme = user?.preferences?.theme || document.documentElement.dataset.theme || 'light';
+  const isDarkMode = currentTheme === 'dark';
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const handleLogout = useCallback(async () => {
+    try {
+      if (token) {
+        await api.logout(token);
+      }
+    } catch {
+      // no-op
+    } finally {
+      clearSession();
+      navigate('/');
+    }
+  }, [clearSession, navigate, token]);
 
-  const handleLogout = () => navigate('/');
+  const handleToggleTheme = useCallback(async () => {
+    if (!user || !token) {
+      return;
+    }
+
+    const nextTheme = isDarkMode ? 'light' : 'dark';
+    const previousUser = user;
+    updateUser({
+      ...user,
+      preferences: {
+        ...user.preferences,
+        theme: nextTheme,
+      },
+    });
+
+    try {
+      const response = await api.updateProfile(
+        {
+          preferences: { theme: nextTheme },
+        },
+        token
+      );
+      updateUser(response.data);
+    } catch {
+      updateUser(previousUser);
+    }
+  }, [isDarkMode, token, updateUser, user]);
 
   return (
     <header className="h-20 px-4 sm:px-8 flex items-center justify-between relative z-10">
@@ -90,7 +132,7 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
         {/* Actions Group */}
         <div className="flex items-center gap-2 p-1.5 bg-white/40 backdrop-blur-md border border-white/40 rounded-2xl">
           <motion.button
-            onClick={() => setIsDarkMode(!isDarkMode)}
+            onClick={handleToggleTheme}
             className="p-2 hover:bg-white rounded-xl transition-all duration-300 text-neutral-600"
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -111,6 +153,49 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
               <span className="absolute top-2 right-2 w-2 h-2 bg-primary-600 rounded-full border-2 border-white" />
             )}
           </motion.button>
+
+          <AnimatePresence>
+            {showNotifications && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-20"
+                  onClick={() => setShowNotifications(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-24 top-full mt-3 w-80 glass rounded-3xl shadow-premium p-2 z-30"
+                >
+                  <div className="p-4 border-b border-neutral-100">
+                    <p className="text-sm font-bold text-neutral-900">Notifications</p>
+                    <p className="text-xs text-neutral-500 mt-1">Recent workspace updates</p>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    {notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className="rounded-2xl px-3 py-3 hover:bg-white/70 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-medium text-neutral-800">
+                            {notification.title}
+                          </p>
+                          {notification.unread && (
+                            <span className="mt-1 w-2 h-2 rounded-full bg-primary-600 flex-shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs text-neutral-500 mt-2">{notification.time}</p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* User Menu */}
@@ -120,16 +205,9 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
             className="flex items-center gap-3 pl-1.5 pr-3 py-1.5 bg-white/40 backdrop-blur-md border border-white/40 rounded-2xl hover:bg-white transition-all duration-300"
             whileHover={{ y: -1 }}
           >
-            <div className="relative">
-              <img
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah"
-                alt="Sarah"
-                className="w-8 h-8 rounded-xl ring-2 ring-white"
-              />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-brand-accent border-2 border-white rounded-full" />
-            </div>
+            <Avatar name={user?.name || 'User'} size="sm" status="online" variant="gradient" />
             <div className="text-left hidden sm:block">
-              <p className="text-xs font-bold text-neutral-900 leading-none">Sarah Chen</p>
+              <p className="text-xs font-bold text-neutral-900 leading-none">{user?.name || 'AuditFlow User'}</p>
             </div>
             <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform duration-300 ${showUserMenu ? 'rotate-180' : ''}`} />
           </motion.button>
@@ -151,8 +229,8 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
                   className="absolute right-0 top-full mt-3 w-64 glass-dark rounded-3xl shadow-premium p-2 z-30"
                 >
                   <div className="p-4 border-b border-white/10">
-                    <p className="text-sm font-bold text-white">Sarah Chen</p>
-                    <p className="text-xs text-neutral-400 mt-1">sarah@acme.com</p>
+                    <p className="text-sm font-bold text-white">{user?.name || 'AuditFlow User'}</p>
+                    <p className="text-xs text-neutral-400 mt-1">{user?.email || ''}</p>
                   </div>
 
                   <div className="p-2 space-y-1">
@@ -190,4 +268,7 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
   );
 };
 
-export default AppHeader;
+const MemoizedAppHeader = memo(AppHeader);
+MemoizedAppHeader.displayName = 'AppHeader';
+
+export default MemoizedAppHeader;

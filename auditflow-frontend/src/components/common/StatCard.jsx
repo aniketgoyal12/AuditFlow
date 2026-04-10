@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { memo } from 'react';
+import { motion } from '../../lib/motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const StatCard = ({ 
@@ -110,4 +111,7 @@ const StatCard = ({
   );
 };
 
-export default StatCard;
+const MemoizedStatCard = memo(StatCard);
+MemoizedStatCard.displayName = 'StatCard';
+
+export default MemoizedStatCard;

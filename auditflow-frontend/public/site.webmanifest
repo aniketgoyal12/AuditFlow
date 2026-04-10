@@ -1,0 +1,16 @@
+{
+  "name": "AuditFlow",
+  "short_name": "AuditFlow",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#7c3aed",
+  "description": "Secure audit workspace for tracking notes, activity, and compliance operations.",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
+import { memo, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from '../../lib/motion';
 import {
   LayoutDashboard,
   FileText,
@@ -7,26 +8,32 @@ import {
   Settings,
   Globe,
   Users,
-  ChevronRight,
   Shield,
   Zap
 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+import Avatar from '../common/Avatar';
+
+const platformLinks = [
+  { name: 'Platform Dashboard', path: '/admin', icon: Globe },
+  { name: 'Members', path: '/admin', icon: Users },
+  { name: 'Settings', path: '/admin', icon: Settings },
+];
 
 const AppSidebar = ({ layoutType = 'workspace', isCollapsed = false }) => {
   const location = useLocation();
+  const { user } = useAuth();
 
-  const workspaceLinks = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Notepad', path: '/notepad', icon: FileText },
-    { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText },
-    { name: 'Settings', path: '/settings', icon: Settings },
-  ];
-
-  const platformLinks = [
-    { name: 'Platform Dashboard', path: '/admin', icon: Globe },
-    { name: 'Members', path: '/admin', icon: Users },
-    { name: 'Settings', path: '/admin', icon: Settings },
-  ];
+  const workspaceLinks = useMemo(
+    () => [
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Notepad', path: '/notepad', icon: FileText },
+      { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText },
+      { name: 'Settings', path: '/settings', icon: Settings },
+      ...(user?.role === 'Admin' ? [{ name: 'Admin', path: '/admin', icon: Globe }] : []),
+    ],
+    [user?.role]
+  );
 
   const links = layoutType === 'platform' ? platformLinks : workspaceLinks;
 
@@ -155,22 +162,15 @@ const AppSidebar = ({ layoutType = 'workspace', isCollapsed = false }) => {
           `}
           whileHover={{ scale: 1.02 }}
         >
-          <div className="relative">
-            <img
-              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah"
-              alt="User"
-              className="w-10 h-10 rounded-xl object-cover bg-primary-100"
-            />
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-brand-accent border-2 border-white rounded-full shadow-sm" />
-          </div>
+          <Avatar name={user?.name || 'User'} size="md" status="online" variant="gradient" />
 
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-neutral-900 truncate tracking-tight">
-                Sarah Chen
+                {user?.name || 'AuditFlow User'}
               </p>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest leading-none mt-1">
-                Enterprise Admin
+                {user?.role || 'Workspace User'}
               </p>
             </div>
           )}
@@ -180,4 +180,7 @@ const AppSidebar = ({ layoutType = 'workspace', isCollapsed = false }) => {
   );
 };
 
-export default AppSidebar;
+const MemoizedAppSidebar = memo(AppSidebar);
+MemoizedAppSidebar.displayName = 'AppSidebar';
+
+export default MemoizedAppSidebar;

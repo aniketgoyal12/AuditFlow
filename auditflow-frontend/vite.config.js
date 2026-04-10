@@ -5,6 +5,22 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    open: true,
+    open: false,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          motion: ['framer-motion'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.js',
   },
 });

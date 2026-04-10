@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { memo } from 'react';
+import { motion } from '../../lib/motion';
 import { Loader2 } from 'lucide-react';
 
 const Button = ({ 
@@ -30,11 +31,6 @@ const Button = ({
     lg: 'px-6 py-3 text-lg',
     xl: 'px-8 py-4 text-xl',
   };
-
-  const rippleVariants = {
-    initial: { scale: 0, opacity: 0.5 },
-    animate: { scale: 4, opacity: 0 },
-  };
   
   return (
     <motion.button
@@ -64,4 +60,7 @@ const Button = ({
   );
 };
 
-export default Button;
+const MemoizedButton = memo(Button);
+MemoizedButton.displayName = 'Button';
+
+export default MemoizedButton;

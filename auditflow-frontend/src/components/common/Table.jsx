@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '../../lib/motion';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
 const Table = ({ 
@@ -57,9 +57,9 @@ const Table = ({
               transition={{ delay: rowIndex * 0.05 }}
               className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
             >
-              {Object.entries(row).map(([key, value], cellIndex) => (
+              {Object.entries(row).map(([cellKey, value], cellIndex) => (
                 <td 
-                  key={cellIndex}
+                  key={cellKey || cellIndex}
                   className="px-6 py-4 text-sm text-neutral-700"
                 >
                   {value}

@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { memo } from 'react';
+import { motion } from '../../lib/motion';
 
 const Card = ({ 
   children, 
@@ -60,4 +61,7 @@ const Card = ({
   );
 };
 
-export default Card;
+const MemoizedCard = memo(Card);
+MemoizedCard.displayName = 'Card';
+
+export default MemoizedCard;

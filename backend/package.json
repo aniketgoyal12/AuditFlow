@@ -8,7 +8,8 @@
     "dev": "nodemon app.js",
     "lint": "node scripts/check-syntax.js",
     "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "seed:admin": "node scripts/seed-admin.js"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,8 @@
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.3.2"
+    "mongoose": "^8.3.2",
+    "nodemailer": "^8.0.5"
   },
   "devDependencies": {
     "jest": "^30.3.0",

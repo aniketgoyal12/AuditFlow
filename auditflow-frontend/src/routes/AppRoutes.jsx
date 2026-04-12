@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 import PageSkeleton from '../components/common/PageSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { getHomeRouteForUser } from '../lib/roles';
 
 const AppLayout = lazy(() => import('../components/Layout/AppLayout'));
 const DashboardPage = lazy(() => import('../pages/Workspace/DashboardPage'));
@@ -12,10 +13,11 @@ const SettingsPage = lazy(() => import('../pages/Workspace/SettingsPage'));
 const AdminDashboard = lazy(() => import('../pages/Workspace/AdminDashboard'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const SignupPage = lazy(() => import('../pages/auth/SignupPage'));
+const SharedNotePage = lazy(() => import('../pages/Workspace/SharedNotePage'));
 
 const AppRoutes = () => {
   const { isAuthenticated, isBootstrapping, user } = useAuth();
-  const defaultRoute = user?.role === 'Admin' ? '/admin' : '/dashboard';
+  const defaultRoute = getHomeRouteForUser(user);
 
   if (isBootstrapping) {
     return <PageSkeleton variant="auth" />;
@@ -35,6 +37,7 @@ const AppRoutes = () => {
             path="/register"
             element={isAuthenticated ? <Navigate to={defaultRoute} replace /> : <SignupPage />}
           />
+          <Route path="/shared/:token" element={<SharedNotePage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout layoutType="workspace" />}>

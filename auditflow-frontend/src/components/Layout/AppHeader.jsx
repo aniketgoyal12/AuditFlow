@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from '../../lib/motion';
 import {
@@ -11,17 +11,17 @@ import {
   User as UserIcon,
   Settings,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  CheckCheck,
+  FileText,
+  Shield,
 } from 'lucide-react';
 import Avatar from '../common/Avatar';
+import Button from '../common/Button';
 import { useAuth } from '../../hooks/useAuth';
 import { api } from '../../lib/api';
-
-const notifications = [
-  { id: 1, title: 'New audit log entry', time: '5m ago', unread: true },
-  { id: 2, title: 'Sarah Chen updated Q4 Report', time: '1h ago', unread: true },
-  { id: 3, title: 'System maintenance scheduled', time: '2h ago', unread: false },
-];
+import { formatRelativeTime } from '../../lib/formatters';
+import { formatUserRole } from '../../lib/roles';
 
 const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
   const navigate = useNavigate();
@@ -29,11 +29,51 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
   const { user, token, clearSession, updateUser } = useAuth();
 
-  const unreadCount = notifications.filter((notification) => notification.unread).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.isRead).length,
+    [notifications]
+  );
   const currentTheme = user?.preferences?.theme || document.documentElement.dataset.theme || 'light';
   const isDarkMode = currentTheme === 'dark';
+
+  const loadNotifications = useCallback(async () => {
+    if (!token) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      setIsNotificationsLoading(true);
+      const response = await api.getNotifications({ limit: 8 }, token);
+      setNotifications(response?.data?.items || []);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setIsNotificationsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    const timerId = window.setInterval(() => {
+      void loadNotifications();
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [loadNotifications, token]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -55,6 +95,7 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
 
     const nextTheme = isDarkMode ? 'light' : 'dark';
     const previousUser = user;
+
     updateUser({
       ...user,
       preferences: {
@@ -76,14 +117,104 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
     }
   }, [isDarkMode, token, updateUser, user]);
 
+  const handleOpenNotifications = useCallback(() => {
+    const nextOpenState = !showNotifications;
+    setShowNotifications(nextOpenState);
+
+    if (nextOpenState) {
+      void loadNotifications();
+    }
+  }, [loadNotifications, showNotifications]);
+
+  const handleNotificationNavigate = useCallback(
+    (notification) => {
+      if (notification?.metadata?.noteId || notification?.metadata?.inviteId) {
+        navigate('/notepad');
+        return;
+      }
+
+      if (notification?.type === 'security') {
+        navigate('/audit-logs');
+        return;
+      }
+
+      navigate('/dashboard');
+    },
+    [navigate]
+  );
+
+  const handleNotificationClick = useCallback(
+    async (notification) => {
+      if (!token) {
+        return;
+      }
+
+      if (!notification.isRead) {
+        setNotifications((current) =>
+          current.map((entry) =>
+            entry.id === notification.id
+              ? {
+                  ...entry,
+                  isRead: true,
+                  readAt: entry.readAt || new Date().toISOString(),
+                }
+              : entry
+          )
+        );
+
+        try {
+          await api.markNotificationRead(notification.id, token);
+        } catch {
+          void loadNotifications();
+        }
+      }
+
+      setShowNotifications(false);
+      handleNotificationNavigate(notification);
+    },
+    [handleNotificationNavigate, loadNotifications, token]
+  );
+
+  const handleMarkAllNotificationsRead = useCallback(async () => {
+    if (!token || unreadCount === 0) {
+      return;
+    }
+
+    const readAt = new Date().toISOString();
+    setNotifications((current) =>
+      current.map((notification) => ({
+        ...notification,
+        isRead: true,
+        readAt: notification.readAt || readAt,
+      }))
+    );
+
+    try {
+      await api.markAllNotificationsRead(token);
+    } catch {
+      void loadNotifications();
+    }
+  }, [loadNotifications, token, unreadCount]);
+
+  const getNotificationIcon = (notificationType) => {
+    if (notificationType === 'invite' || notificationType === 'share') {
+      return <FileText className="w-4 h-4 text-blue-600" />;
+    }
+
+    if (notificationType === 'security') {
+      return <Shield className="w-4 h-4 text-red-600" />;
+    }
+
+    return <Bell className="w-4 h-4 text-neutral-600" />;
+  };
+
   return (
     <header className="h-20 px-4 sm:px-8 flex items-center justify-between relative z-10">
-      {/* Left Section */}
       <div className="flex items-center gap-6 flex-1">
         <motion.button
           onClick={onToggleSidebar}
           className="p-2.5 bg-white/50 hover:bg-white rounded-2xl shadow-sm border border-neutral-100 transition-all duration-300"
-          whileHover={{ scale: 1.05, shadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}
+          whileHover={{ scale: 1.05, shadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
           whileTap={{ scale: 0.95 }}
         >
           {isSidebarCollapsed ? (
@@ -93,33 +224,35 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
           )}
         </motion.button>
 
-        {/* Search Bar */}
         <motion.div
           className="relative flex-1 max-w-xl hidden md:block"
           animate={{
             scale: isSearchFocused ? 1.01 : 1,
           }}
         >
-          <div className={`
+          <div
+            className={`
             absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-300
             ${isSearchFocused ? 'text-primary-600' : 'text-neutral-400'}
-          `}>
+          `}
+          >
             <Search className="w-5 h-5" />
           </div>
           <input
             type="text"
             placeholder="Quick search (Ctrl + K)"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setIsSearchFocused(false)}
             className={`
               w-full pl-12 pr-4 py-3 rounded-2xl
               bg-white/50 border border-white/40
               transition-all duration-300 backdrop-blur-md
-              ${isSearchFocused
-                ? 'bg-white border-primary-200 shadow-premium ring-4 ring-primary-500/5'
-                : 'hover:bg-white/80'
+              ${
+                isSearchFocused
+                  ? 'bg-white border-primary-200 shadow-premium ring-4 ring-primary-500/5'
+                  : 'hover:bg-white/80'
               }
               focus:outline-none placeholder:text-neutral-400 font-medium text-sm
             `}
@@ -127,9 +260,7 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
         </motion.div>
       </div>
 
-      {/* Right Section */}
       <div className="flex items-center gap-4">
-        {/* Actions Group */}
         <div className="flex items-center gap-2 p-1.5 bg-white/40 backdrop-blur-md border border-white/40 rounded-2xl">
           <motion.button
             onClick={handleToggleTheme}
@@ -143,14 +274,16 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
           <div className="w-px h-4 bg-neutral-200 mx-1" />
 
           <motion.button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={handleOpenNotifications}
             className="relative p-2 hover:bg-white rounded-xl transition-all duration-300 text-neutral-600"
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-primary-600 rounded-full border-2 border-white" />
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-primary-600 text-white text-[11px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
             )}
           </motion.button>
 
@@ -168,29 +301,63 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-24 top-full mt-3 w-80 glass rounded-3xl shadow-premium p-2 z-30"
+                  className="absolute right-24 top-full mt-3 w-[360px] glass rounded-3xl shadow-premium p-2 z-30"
                 >
-                  <div className="p-4 border-b border-neutral-100">
-                    <p className="text-sm font-bold text-neutral-900">Notifications</p>
-                    <p className="text-xs text-neutral-500 mt-1">Recent workspace updates</p>
-                  </div>
-                  <div className="p-2 space-y-1">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className="rounded-2xl px-3 py-3 hover:bg-white/70 transition-colors"
+                  <div className="p-4 border-b border-neutral-100 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-neutral-900">Notifications</p>
+                      <p className="text-xs text-neutral-500 mt-1">Recent workspace updates</p>
+                    </div>
+                    {unreadCount > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        leftIcon={<CheckCheck className="w-4 h-4" />}
+                        onClick={handleMarkAllNotificationsRead}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm font-medium text-neutral-800">
-                            {notification.title}
-                          </p>
-                          {notification.unread && (
-                            <span className="mt-1 w-2 h-2 rounded-full bg-primary-600 flex-shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-xs text-neutral-500 mt-2">{notification.time}</p>
+                        Mark all read
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="p-2 space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar">
+                    {isNotificationsLoading ? (
+                      <div className="px-3 py-6 text-sm text-neutral-500 text-center">
+                        Loading notifications…
                       </div>
-                    ))}
+                    ) : notifications.length > 0 ? (
+                      notifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          type="button"
+                          onClick={() => void handleNotificationClick(notification)}
+                          className={`w-full text-left rounded-2xl px-3 py-3 transition-colors ${
+                            notification.isRead ? 'hover:bg-white/70' : 'bg-blue-50/70 hover:bg-blue-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                              {getNotificationIcon(notification.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-medium text-neutral-800">{notification.message}</p>
+                                {!notification.isRead && (
+                                  <span className="mt-1 w-2 h-2 rounded-full bg-primary-600 flex-shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-xs text-neutral-500 mt-2">
+                                {formatRelativeTime(notification.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-6 text-sm text-neutral-500 text-center">
+                        You’re all caught up.
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               </>
@@ -198,7 +365,6 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
           </AnimatePresence>
         </div>
 
-        {/* User Menu */}
         <div className="relative">
           <motion.button
             onClick={() => setShowUserMenu(!showUserMenu)}
@@ -208,8 +374,13 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
             <Avatar name={user?.name || 'User'} size="sm" status="online" variant="gradient" />
             <div className="text-left hidden sm:block">
               <p className="text-xs font-bold text-neutral-900 leading-none">{user?.name || 'AuditFlow User'}</p>
+              <p className="text-[10px] text-neutral-500 mt-1">{user?.role ? formatUserRole(user.role) : ''}</p>
             </div>
-            <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform duration-300 ${showUserMenu ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              className={`w-4 h-4 text-neutral-400 transition-transform duration-300 ${
+                showUserMenu ? 'rotate-180' : ''
+              }`}
+            />
           </motion.button>
 
           <AnimatePresence>
@@ -240,7 +411,10 @@ const AppHeader = ({ onToggleSidebar, isSidebarCollapsed }) => {
                     ].map((item) => (
                       <button
                         key={item.label}
-                        onClick={() => { setShowUserMenu(false); navigate(item.path); }}
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          navigate(item.path);
+                        }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold text-neutral-300 hover:text-white hover:bg-white/10 rounded-xl transition-all"
                       >
                         <item.icon className="w-4 h-4" />

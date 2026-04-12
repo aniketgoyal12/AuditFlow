@@ -45,8 +45,17 @@ const getClientOrigins = (nodeEnv) => {
   return nodeEnv === "production" ? [] : DEFAULT_DEV_CLIENT_ORIGINS;
 };
 
+const parseBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  return String(value).toLowerCase() === "true";
+};
+
 const getEnv = () => {
   const nodeEnv = getNodeEnv();
+  const clientOrigins = getClientOrigins(nodeEnv);
 
   return {
     nodeEnv,
@@ -56,10 +65,24 @@ const getEnv = () => {
     mongoUri: process.env.MONGO_URI || getDefaultMongoUri(nodeEnv),
     jwtSecret: process.env.JWT_SECRET || getDefaultJwtSecret(nodeEnv),
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || "12h",
-    clientOrigins: getClientOrigins(nodeEnv),
+    clientOrigins,
+    appUrl: process.env.APP_URL || clientOrigins[0] || "",
     authMaxAttempts: Number(process.env.AUTH_MAX_ATTEMPTS || 5),
     authLockMinutes: Number(process.env.AUTH_LOCK_MINUTES || 15),
     logLevel: process.env.LOG_LEVEL || "info",
+    email: {
+      from: process.env.EMAIL_FROM || "AuditFlow <no-reply@auditflow.local>",
+      host: process.env.SMTP_HOST || "",
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: parseBoolean(process.env.SMTP_SECURE, false),
+      user: process.env.SMTP_USER || "",
+      password: process.env.SMTP_PASS || "",
+    },
+    seedAdmin: {
+      name: process.env.ADMIN_NAME || "AuditFlow Admin",
+      email: process.env.ADMIN_EMAIL || "",
+      password: process.env.ADMIN_PASSWORD || "",
+    },
   };
 };
 

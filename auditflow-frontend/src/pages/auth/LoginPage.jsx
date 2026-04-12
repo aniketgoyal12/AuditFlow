@@ -6,6 +6,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { getHomeRouteForUser } from '../../lib/roles';
 
 const quickCredentials = [
   {
@@ -37,7 +38,7 @@ const LoginPage = () => {
     try {
       const response = await api.login({ email, password, rememberMe });
       setSession({ ...response.data, rememberMe });
-      navigate(response.data.user.role === 'Admin' ? '/admin' : '/dashboard');
+      navigate(getHomeRouteForUser(response.data.user));
     } catch (apiError) {
       setError(apiError.message);
     } finally {

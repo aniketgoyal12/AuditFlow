@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import Loader from '../common/Loader';
 import { useAuth } from '../../hooks/useAuth';
+import { isAdminUser } from '../../lib/roles';
 
 const ProtectedRoute = ({ adminOnly = false }) => {
   const { isAuthenticated, isBootstrapping, user } = useAuth();
@@ -17,7 +18,7 @@ const ProtectedRoute = ({ adminOnly = false }) => {
     return <Navigate to="/" replace />;
   }
 
-  if (adminOnly && user?.role !== 'Admin') {
+  if (adminOnly && !isAdminUser(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 

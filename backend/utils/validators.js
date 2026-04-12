@@ -1,11 +1,11 @@
 const mongoose = require("mongoose");
 const AppError = require("./AppError");
+const { USER_ROLES } = require("./roles");
 
 const isEmail = (value = "") => /\S+@\S+\.\S+/.test(value);
 const hasStrongPassword = (value = "") =>
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(value);
 
-const USER_ROLES = ["Admin", "Editor", "User"];
 const USER_STATUSES = ["active", "inactive", "suspended"];
 const NOTE_COLORS = ["primary", "error", "warning", "success", "purple", "info"];
 const NOTE_ACCESS_LEVELS = ["Owner", "Editor", "Read Only"];

@@ -5,6 +5,7 @@ const AppError = require("../utils/AppError");
 const { sendResponse } = require("../utils/apiResponse");
 const generateToken = require("../utils/generateToken");
 const { createAuditLog } = require("../utils/auditLogger");
+const { normalizeUserRole } = require("../utils/roles");
 const {
   hasStrongPassword,
   normalizeEmail,
@@ -28,7 +29,7 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   phone: user.phone,
-  role: user.role,
+  role: normalizeUserRole(user.role),
   status: user.status,
   notificationSettings: user.notificationSettings,
   preferences: user.preferences,
@@ -64,13 +65,12 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new AppError("User already exists with this email", 400);
   }
 
-  const userCount = await User.countDocuments();
   const user = await User.create({
     name,
     email: email.toLowerCase(),
     password,
     phone,
-    role: userCount === 0 ? "Admin" : "User",
+    role: "user",
   });
 
   user.lastLoginAt = new Date();

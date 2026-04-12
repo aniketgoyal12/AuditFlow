@@ -1,11 +1,34 @@
-process.env.AUTH_MAX_ATTEMPTS = "5";
-process.env.AUTH_LOCK_MINUTES = "15";
-
 const request = require("supertest");
 
-const ORIGINAL_ENV = { ...process.env };
+const BASE_ENV = {
+  nodeEnv: "test",
+  isProduction: false,
+  isTest: true,
+  port: 5000,
+  mongoUri: "mongodb://127.0.0.1:27017/auditVault",
+  jwtSecret: "test-jwt-secret-12345678901234567890",
+  jwtExpiresIn: "12h",
+  clientOrigins: ["http://localhost:3000"],
+  appUrl: "http://localhost:3000",
+  authMaxAttempts: 5,
+  authLockMinutes: 15,
+  logLevel: "info",
+  email: {
+    from: "AuditFlow <no-reply@example.com>",
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    password: "",
+  },
+  seedAdmin: {
+    name: "AuditFlow Admin",
+    email: "",
+    password: "",
+  },
+};
 
-const loadApp = () => {
+const loadApp = (envOverrides = {}) => {
   jest.resetModules();
   jest.doMock("../utils/logger", () => ({
     info: jest.fn(),
@@ -14,24 +37,18 @@ const loadApp = () => {
     debug: jest.fn(),
   }));
 
+  jest.doMock("../config/env", () => {
+    const env = { ...BASE_ENV, ...envOverrides };
+    return {
+      getEnv: () => env,
+      validateEnvironment: () => env,
+    };
+  });
+
   return require("../app").createApp();
 };
 
 describe("app configuration", () => {
-  beforeEach(() => {
-    process.env = {
-      ...ORIGINAL_ENV,
-      NODE_ENV: "test",
-      JWT_SECRET: "test-jwt-secret-12345678901234567890",
-      AUTH_MAX_ATTEMPTS: "5",
-      AUTH_LOCK_MINUTES: "15",
-    };
-  });
-
-  afterAll(() => {
-    process.env = ORIGINAL_ENV;
-  });
-
   it("returns a success payload for the root route", async () => {
     const app = loadApp();
 
@@ -44,12 +61,13 @@ describe("app configuration", () => {
   });
 
   it("allows production preflight requests when no client origins are configured", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.JWT_SECRET = "12345678901234567890123456789012";
-    delete process.env.CLIENT_URL;
-    delete process.env.CLIENT_ORIGINS;
-
-    const app = loadApp();
+    const app = loadApp({
+      nodeEnv: "production",
+      isProduction: true,
+      isTest: false,
+      clientOrigins: [],
+      appUrl: "",
+    });
 
     const response = await request(app)
       .options("/api/auth/register")
@@ -61,11 +79,12 @@ describe("app configuration", () => {
   });
 
   it("treats localhost-only production CORS configuration as unconfigured", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.JWT_SECRET = "12345678901234567890123456789012";
-    process.env.CLIENT_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000";
-
-    const app = loadApp();
+    const app = loadApp({
+      nodeEnv: "production",
+      isProduction: true,
+      isTest: false,
+      clientOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    });
 
     const response = await request(app)
       .options("/api/auth/register")
@@ -77,11 +96,13 @@ describe("app configuration", () => {
   });
 
   it("rejects origins outside the configured allowlist in production", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.JWT_SECRET = "12345678901234567890123456789012";
-    process.env.CLIENT_ORIGINS = "https://app.example.com";
-
-    const app = loadApp();
+    const app = loadApp({
+      nodeEnv: "production",
+      isProduction: true,
+      isTest: false,
+      clientOrigins: ["https://app.example.com"],
+      appUrl: "https://app.example.com",
+    });
 
     const response = await request(app)
       .options("/api/auth/register")

@@ -1,14 +1,20 @@
+const crypto = require("crypto");
+
 const Note = require("../models/Note");
 const NoteAccess = require("../models/NoteAccess");
 const NoteInvite = require("../models/NoteInvite");
+const NoteVersion = require("../models/NoteVersion");
+const NoteShareLink = require("../models/NoteShareLink");
 const User = require("../models/user");
+const { getEnv } = require("../config/env");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/AppError");
 const { sendResponse } = require("../utils/apiResponse");
 const { createAuditLog } = require("../utils/auditLogger");
+const { createNotification } = require("../utils/notificationService");
+const { sendEmailInBackground } = require("../utils/email");
 const {
   NOTE_COLORS,
-  NOTE_ACCESS_LEVELS,
   assertObjectId,
   normalizeEmail,
   requireFields,
@@ -16,9 +22,25 @@ const {
   sanitizeStringArray,
   sanitizeText,
 } = require("../utils/validators");
+const {
+  canEditNote,
+  getNotePermissionLabel,
+  getNotePermissionSlug,
+  isNoteOwnerPermission,
+  toStoredNotePermission,
+} = require("../utils/notePermissions");
 
 const NOTE_INVITE_DECISIONS = ["accepted", "declined"];
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const SHARE_LINK_VISIBILITIES = ["private", "public"];
+const NOTE_FILTERS = ["all", "owner", "shared"];
+const NOTE_DATE_RANGES = ["all", "today", "7d", "30d", "90d"];
+
+const formatOwner = (owner) => ({
+  id: owner?._id?.toString?.() || owner?._id || owner,
+  name: owner?.name || "Unknown User",
+  email: owner?.email || "",
+});
 
 const formatNote = (note, accessLevel) => ({
   id: note._id.toString(),
@@ -26,12 +48,17 @@ const formatNote = (note, accessLevel) => ({
   title: note.title,
   content: note.content,
   owner: note.owner?.name || "Unknown User",
+  ownerDetails: formatOwner(note.owner),
   ownerId: note.owner?._id || note.owner,
-  role: accessLevel,
+  role: getNotePermissionLabel(accessLevel),
+  permission: getNotePermissionSlug(accessLevel),
+  canEdit: canEditNote(accessLevel),
+  canShare: isNoteOwnerPermission(accessLevel),
   lastModified: note.updatedAt,
   tags: note.tags || [],
   color: note.color,
   collaborators: note.collaborators || 0,
+  currentVersion: note.currentVersion || 1,
   createdAt: note.createdAt,
   updatedAt: note.updatedAt,
 });
@@ -41,8 +68,9 @@ const formatCollaborator = (entry) => ({
   name: entry.userId?.name || "Unknown User",
   email: entry.userId?.email || "",
   status: entry.userId?.status || "active",
-  accessLevel: entry.accessLevel,
-  isOwner: entry.accessLevel === "Owner",
+  accessLevel: getNotePermissionLabel(entry.accessLevel),
+  permission: getNotePermissionSlug(entry.accessLevel),
+  isOwner: isNoteOwnerPermission(entry.accessLevel),
   addedAt: entry.createdAt,
   updatedAt: entry.updatedAt,
 });
@@ -50,7 +78,8 @@ const formatCollaborator = (entry) => ({
 const formatInvite = (invite) => ({
   id: invite._id?.toString?.() || invite._id,
   email: invite.invitedEmail,
-  accessLevel: invite.accessLevel,
+  accessLevel: getNotePermissionLabel(invite.accessLevel),
+  permission: getNotePermissionSlug(invite.accessLevel),
   status: invite.status,
   invitedAt: invite.createdAt,
   expiresAt: invite.expiresAt,
@@ -74,7 +103,8 @@ const formatInvite = (invite) => ({
 const formatIncomingInvite = (invite) => ({
   id: invite._id?.toString?.() || invite._id,
   email: invite.invitedEmail,
-  accessLevel: invite.accessLevel,
+  accessLevel: getNotePermissionLabel(invite.accessLevel),
+  permission: getNotePermissionSlug(invite.accessLevel),
   status: invite.status,
   invitedAt: invite.createdAt,
   expiresAt: invite.expiresAt,
@@ -84,13 +114,7 @@ const formatIncomingInvite = (invite) => ({
         title: invite.noteId.title,
         color: invite.noteId.color,
         updatedAt: invite.noteId.updatedAt,
-        owner: invite.noteId.owner
-          ? {
-              id: invite.noteId.owner._id?.toString?.() || invite.noteId.owner._id,
-              name: invite.noteId.owner.name,
-              email: invite.noteId.owner.email,
-            }
-          : null,
+        owner: invite.noteId.owner ? formatOwner(invite.noteId.owner) : null,
       }
     : null,
   invitedBy: invite.invitedBy
@@ -98,6 +122,65 @@ const formatIncomingInvite = (invite) => ({
         id: invite.invitedBy._id?.toString?.() || invite.invitedBy._id,
         name: invite.invitedBy.name,
         email: invite.invitedBy.email,
+      }
+    : null,
+});
+
+const buildShareUrl = (token) => {
+  const { appUrl } = getEnv();
+
+  if (!appUrl) {
+    return "";
+  }
+
+  return `${appUrl.replace(/\/+$/, "")}/shared/${token}`;
+};
+
+const buildAppUrl = (path = "/") => {
+  const { appUrl } = getEnv();
+
+  if (!appUrl) {
+    return "";
+  }
+
+  return `${appUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const formatShareLink = (link) => {
+  if (!link) {
+    return null;
+  }
+
+  return {
+    id: link._id?.toString?.() || link._id,
+    token: link.token,
+    visibility: link.visibility,
+    isActive: Boolean(link.isActive),
+    expiresAt: link.expiresAt,
+    createdAt: link.createdAt,
+    updatedAt: link.updatedAt,
+    lastAccessedAt: link.lastAccessedAt,
+    accessCount: link.accessCount || 0,
+    sharePath: `/shared/${link.token}`,
+    shareUrl: buildShareUrl(link.token),
+  };
+};
+
+const formatVersion = (version, currentVersion) => ({
+  id: version._id?.toString?.() || version._id,
+  versionNumber: version.versionNumber,
+  title: version.title,
+  content: version.content,
+  tags: version.tags || [],
+  color: version.color,
+  sourceAction: version.sourceAction,
+  createdAt: version.createdAt,
+  isCurrent: version.versionNumber === currentVersion,
+  updatedBy: version.updatedBy
+    ? {
+        id: version.updatedBy._id?.toString?.() || version.updatedBy._id,
+        name: version.updatedBy.name,
+        email: version.updatedBy.email,
       }
     : null,
 });
@@ -135,15 +218,93 @@ const sanitizeNoteInput = (payload, { partial = false } = {}) => {
   return sanitized;
 };
 
+const sanitizeShareLinkInput = (payload = {}) => {
+  const visibility = payload.visibility
+    ? sanitizeEnum(payload.visibility, SHARE_LINK_VISIBILITIES, "Link visibility")
+    : "private";
+
+  let expiresAt = null;
+  if (payload.expiresAt !== undefined && payload.expiresAt !== null && payload.expiresAt !== "") {
+    const parsedDate = new Date(payload.expiresAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new AppError("Expiry date is invalid", 400);
+    }
+    if (parsedDate.getTime() <= Date.now()) {
+      throw new AppError("Expiry date must be in the future", 400);
+    }
+    expiresAt = parsedDate;
+  }
+
+  return {
+    visibility,
+    expiresAt,
+    regenerate: Boolean(payload.regenerate),
+  };
+};
+
 const buildPendingInviteQuery = (query = {}) => ({
   ...query,
   status: "pending",
   $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
 });
 
+const resolveUpdatedAtRange = (query = {}) => {
+  const range = {};
+  const now = Date.now();
+  const dateRange = query.dateRange || "all";
+
+  if (!NOTE_DATE_RANGES.includes(dateRange)) {
+    throw new AppError("Invalid date range filter", 400);
+  }
+
+  if (dateRange === "today") {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    range.$gte = startOfDay;
+  } else if (dateRange === "7d") {
+    range.$gte = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  } else if (dateRange === "30d") {
+    range.$gte = new Date(now - 30 * 24 * 60 * 60 * 1000);
+  } else if (dateRange === "90d") {
+    range.$gte = new Date(now - 90 * 24 * 60 * 60 * 1000);
+  }
+
+  if (query.dateFrom) {
+    const fromDate = new Date(query.dateFrom);
+    if (Number.isNaN(fromDate.getTime())) {
+      throw new AppError("dateFrom must be a valid date", 400);
+    }
+    range.$gte = fromDate;
+  }
+
+  if (query.dateTo) {
+    const toDate = new Date(query.dateTo);
+    if (Number.isNaN(toDate.getTime())) {
+      throw new AppError("dateTo must be a valid date", 400);
+    }
+    toDate.setHours(23, 59, 59, 999);
+    range.$lte = toDate;
+  }
+
+  return Object.keys(range).length ? range : null;
+};
+
 const refreshCollaboratorCount = async (note) => {
   note.collaborators = await NoteAccess.countDocuments({ noteId: note._id });
   await note.save();
+};
+
+const createNoteVersionSnapshot = async (note, updatedBy, sourceAction) => {
+  await NoteVersion.create({
+    noteId: note._id,
+    versionNumber: note.currentVersion || 1,
+    title: note.title,
+    content: note.content,
+    tags: note.tags || [],
+    color: note.color,
+    updatedBy,
+    sourceAction,
+  });
 };
 
 const ensureNoteAccess = async (noteId, userId) => {
@@ -162,13 +323,42 @@ const ensureNoteAccess = async (noteId, userId) => {
   return { note, access };
 };
 
+const ensureOwnerAccess = async (noteId, userId) => {
+  const { note, access } = await ensureNoteAccess(noteId, userId);
+
+  if (!isNoteOwnerPermission(access.accessLevel)) {
+    throw new AppError("Only the owner can manage this note", 403);
+  }
+
+  return { note, access };
+};
+
+const ensureEditableAccess = async (noteId, userId) => {
+  const { note, access } = await ensureNoteAccess(noteId, userId);
+
+  if (!canEditNote(access.accessLevel)) {
+    throw new AppError("Not authorized to update this note", 403);
+  }
+
+  return { note, access };
+};
+
+const buildSharedNoteEmail = ({ actorName, noteTitle, shareUrl }) => ({
+  subject: `${actorName} shared a note with you in AuditFlow`,
+  text: [
+    `${actorName} shared "${noteTitle}" with you in AuditFlow.`,
+    shareUrl ? `Open it here: ${shareUrl}` : "Sign in to AuditFlow to view the note.",
+  ].join("\n\n"),
+});
+
 const getNotes = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.min(Math.max(Number(req.query.limit) || 9, 1), 50);
   const search = req.query.search?.trim() || "";
   const filter = req.query.filter || "all";
+  const updatedAtRange = resolveUpdatedAtRange(req.query);
 
-  if (!["all", "owner", "shared"].includes(filter)) {
+  if (!NOTE_FILTERS.includes(filter)) {
     throw new AppError("Invalid note filter", 400);
   }
 
@@ -180,13 +370,16 @@ const getNotes = asyncHandler(async (req, res) => {
     accessQuery.accessLevel = { $ne: "Owner" };
   }
 
-  const accessEntries = await NoteAccess.find(accessQuery);
+  const accessEntries = await NoteAccess.find(accessQuery).lean();
   const noteIds = accessEntries.map((entry) => entry.noteId).filter(Boolean);
   const accessMap = new Map(accessEntries.map((entry) => [entry.noteId.toString(), entry.accessLevel]));
 
   const query = { _id: { $in: noteIds } };
   if (search) {
     query.$text = { $search: search };
+  }
+  if (updatedAtRange) {
+    query.updatedAt = updatedAtRange;
   }
 
   const [notes, totalRecords] = await Promise.all([
@@ -197,15 +390,22 @@ const getNotes = asyncHandler(async (req, res) => {
       .limit(limit),
     Note.countDocuments(query),
   ]);
-  const items = notes.map((note) => formatNote(note, accessMap.get(note._id.toString())));
 
   sendResponse(res, 200, "Notes fetched successfully", {
-    items,
+    items: notes.map((note) => formatNote(note, accessMap.get(note._id.toString()))),
     pagination: {
       page,
       limit,
       total: totalRecords,
       totalPages: Math.max(Math.ceil(totalRecords / limit), 1),
+      hasMore: page * limit < totalRecords,
+    },
+    filters: {
+      search,
+      filter,
+      dateRange: req.query.dateRange || "all",
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
     },
   });
 });
@@ -222,13 +422,17 @@ const createNote = asyncHandler(async (req, res) => {
     color,
     owner: req.user._id,
     collaborators: 1,
+    currentVersion: 1,
   });
 
-  await NoteAccess.create({
-    noteId: note._id,
-    userId: req.user._id,
-    accessLevel: "Owner",
-  });
+  await Promise.all([
+    NoteAccess.create({
+      noteId: note._id,
+      userId: req.user._id,
+      accessLevel: "Owner",
+    }),
+    createNoteVersionSnapshot(note, req.user._id, "create"),
+  ]);
 
   const populatedNote = await Note.findById(note._id).populate("owner", "name email");
 
@@ -269,18 +473,36 @@ const getNoteById = asyncHandler(async (req, res) => {
 const updateNote = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "Note identifier");
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
+  const { note, access } = await ensureEditableAccess(req.params.id, req.user._id);
+  const { title, content, tags, color } = sanitizeNoteInput(req.body, { partial: true });
+  const updateFields = { title, content, tags, color };
+  const providedFields = Object.entries(updateFields).filter(([, value]) => value !== undefined);
 
-  if (access.accessLevel === "Read Only") {
-    throw new AppError("Not authorized to update this note", 403);
+  if (providedFields.length === 0) {
+    throw new AppError("At least one note field must be provided", 400);
   }
 
-  const { title, content, tags, color } = sanitizeNoteInput(req.body, { partial: true });
+  const hasChanges = providedFields.some(([field, value]) => {
+    if (field === "tags") {
+      return JSON.stringify(note.tags || []) !== JSON.stringify(value || []);
+    }
+
+    return note[field] !== value;
+  });
+
+  if (!hasChanges) {
+    sendResponse(res, 200, "No note changes detected", formatNote(note, access.accessLevel));
+    return;
+  }
+
   if (title !== undefined) note.title = title;
   if (content !== undefined) note.content = content;
   if (tags !== undefined) note.tags = tags;
   if (color !== undefined) note.color = color;
+
+  note.currentVersion = (note.currentVersion || 1) + 1;
   await note.save();
+  await createNoteVersionSnapshot(note, req.user._id, "update");
 
   await createAuditLog({
     actorId: req.user._id,
@@ -298,16 +520,14 @@ const updateNote = asyncHandler(async (req, res) => {
 const deleteNote = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "Note identifier");
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
 
-  if (access.accessLevel !== "Owner") {
-    throw new AppError("Only the owner can delete this note", 403);
-  }
-
-  await Note.deleteOne({ _id: req.params.id });
   await Promise.all([
+    Note.deleteOne({ _id: req.params.id }),
     NoteAccess.deleteMany({ noteId: req.params.id }),
     NoteInvite.deleteMany({ noteId: req.params.id }),
+    NoteVersion.deleteMany({ noteId: req.params.id }),
+    NoteShareLink.deleteOne({ noteId: req.params.id }),
   ]);
 
   await createAuditLog({
@@ -323,54 +543,98 @@ const deleteNote = asyncHandler(async (req, res) => {
   sendResponse(res, 200, "Note removed successfully", null);
 });
 
+const getNoteVersions = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id, "Note identifier");
+
+  const { note } = await ensureNoteAccess(req.params.id, req.user._id);
+  const versions = await NoteVersion.find({ noteId: req.params.id })
+    .populate("updatedBy", "name email")
+    .sort({ versionNumber: -1 });
+
+  sendResponse(res, 200, "Note version history fetched successfully", {
+    currentVersion: note.currentVersion || 1,
+    items: versions.map((version) => formatVersion(version, note.currentVersion || 1)),
+  });
+});
+
+const restoreNoteVersion = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id, "Note identifier");
+  assertObjectId(req.params.versionId, "Version identifier");
+
+  const { note, access } = await ensureEditableAccess(req.params.id, req.user._id);
+  const version = await NoteVersion.findOne({
+    _id: req.params.versionId,
+    noteId: req.params.id,
+  }).populate("updatedBy", "name email");
+
+  if (!version) {
+    throw new AppError("Version not found", 404);
+  }
+
+  note.title = version.title;
+  note.content = version.content;
+  note.tags = version.tags || [];
+  note.color = version.color;
+  note.currentVersion = (note.currentVersion || 1) + 1;
+  await note.save();
+  await createNoteVersionSnapshot(note, req.user._id, "restore");
+
+  await createAuditLog({
+    actorId: req.user._id,
+    action: "edit",
+    summary: `${req.user.name} restored note version ${version.versionNumber}`,
+    target: note.title,
+    entityType: "Note",
+    entityId: note._id.toString(),
+    metadata: { restoredVersion: version.versionNumber },
+    req,
+  });
+
+  sendResponse(res, 200, "Note restored successfully", {
+    note: formatNote(note, access.accessLevel),
+    restoredFrom: formatVersion(version, note.currentVersion),
+  });
+});
+
 const getNoteSharing = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "Note identifier");
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
 
-  if (access.accessLevel !== "Owner") {
-    throw new AppError("Only the owner can manage note invitations", 403);
-  }
-
-  const [collaborators, invites] = await Promise.all([
-    NoteAccess.find({ noteId: req.params.id }).populate("userId", "name email status").sort({ createdAt: 1 }),
+  const [collaborators, invites, shareLink] = await Promise.all([
+    NoteAccess.find({ noteId: req.params.id })
+      .populate("userId", "name email status")
+      .sort({ createdAt: 1 }),
     NoteInvite.find(buildPendingInviteQuery({ noteId: req.params.id }))
       .populate("invitedBy", "name email")
       .populate("invitedUserId", "name email status")
       .sort({ createdAt: -1 }),
+    NoteShareLink.findOne({ noteId: req.params.id }),
   ]);
 
   sendResponse(res, 200, "Note sharing fetched successfully", {
     note: {
       id: note._id.toString(),
       title: note.title,
-      owner: {
-        id: note.owner?._id?.toString?.() || note.owner?._id || note.owner,
-        name: note.owner?.name || "Unknown User",
-        email: note.owner?.email || "",
-      },
+      owner: formatOwner(note.owner),
     },
     collaborators: collaborators.map(formatCollaborator),
     invites: invites.map(formatInvite),
+    shareLink: formatShareLink(shareLink),
   });
 });
 
 const shareNote = asyncHandler(async (req, res) => {
   requireFields(req.body, ["email", "accessLevel"]);
-
   assertObjectId(req.params.id, "Note identifier");
 
   const email = normalizeEmail(req.body.email);
-  const accessLevel = sanitizeEnum(
-    req.body.accessLevel,
-    NOTE_ACCESS_LEVELS.filter((level) => level !== "Owner"),
-    "Access level"
-  );
+  const storedAccessLevel = toStoredNotePermission(req.body.accessLevel, {
+    allowOwner: false,
+  });
+  const displayAccessLevel = getNotePermissionLabel(storedAccessLevel);
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
-  if (access.accessLevel !== "Owner") {
-    throw new AppError("Only the owner can share this note", 403);
-  }
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
 
   if (email === req.user.email?.toLowerCase()) {
     throw new AppError("You already own this note", 400);
@@ -386,7 +650,7 @@ const shareNote = asyncHandler(async (req, res) => {
     : null;
 
   if (existingAccess) {
-    if (existingAccess.accessLevel === "Owner") {
+    if (isNoteOwnerPermission(existingAccess.accessLevel)) {
       throw new AppError("This user already owns the note", 400);
     }
 
@@ -395,12 +659,28 @@ const shareNote = asyncHandler(async (req, res) => {
       {
         noteId: req.params.id,
         userId: collaborator._id,
-        accessLevel,
+        accessLevel: storedAccessLevel,
       },
       { new: true }
     );
 
     await refreshCollaboratorCount(note);
+
+    await createNotification({
+      userId: collaborator._id,
+      type: "share",
+      message: `${req.user.name} updated your access to "${note.title}"`,
+      metadata: {
+        noteId: note._id.toString(),
+        accessLevel: getNotePermissionSlug(storedAccessLevel),
+      },
+      emailSubject: `${req.user.name} updated a shared note in AuditFlow`,
+      emailText: buildSharedNoteEmail({
+        actorName: req.user.name,
+        noteTitle: note.title,
+        shareUrl: buildAppUrl("/notepad"),
+      }).text,
+    });
 
     await createAuditLog({
       actorId: req.user._id,
@@ -409,7 +689,7 @@ const shareNote = asyncHandler(async (req, res) => {
       target: note.title,
       entityType: "Note",
       entityId: note._id.toString(),
-      metadata: { collaborator: collaborator.email, accessLevel },
+      metadata: { collaborator: collaborator.email, accessLevel: storedAccessLevel },
       req,
     });
 
@@ -419,7 +699,8 @@ const shareNote = asyncHandler(async (req, res) => {
         id: collaborator._id.toString(),
         name: collaborator.name,
         email: collaborator.email,
-        accessLevel,
+        accessLevel: displayAccessLevel,
+        permission: getNotePermissionSlug(storedAccessLevel),
       },
     });
     return;
@@ -435,13 +716,45 @@ const shareNote = asyncHandler(async (req, res) => {
       invitedBy: req.user._id,
       invitedEmail: email,
       invitedUserId: collaborator?._id || null,
-      accessLevel,
+      accessLevel: storedAccessLevel,
       status: "pending",
       respondedAt: null,
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
+
+  if (collaborator) {
+    await createNotification({
+      userId: collaborator._id,
+      type: "invite",
+      message: `${req.user.name} shared "${note.title}" with you`,
+      metadata: {
+        noteId: note._id.toString(),
+        inviteId: invite._id?.toString?.() || invite._id,
+        accessLevel: getNotePermissionSlug(storedAccessLevel),
+      },
+      emailSubject: `${req.user.name} shared a note with you in AuditFlow`,
+      emailText: buildSharedNoteEmail({
+        actorName: req.user.name,
+        noteTitle: note.title,
+        shareUrl: buildAppUrl("/notepad"),
+      }).text,
+    });
+  }
+
+  if (!collaborator) {
+    const emailPayload = buildSharedNoteEmail({
+      actorName: req.user.name,
+      noteTitle: note.title,
+      shareUrl: buildAppUrl("/"),
+    });
+    sendEmailInBackground({
+      to: email,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+    });
+  }
 
   await createAuditLog({
     actorId: req.user._id,
@@ -450,7 +763,11 @@ const shareNote = asyncHandler(async (req, res) => {
     target: note.title,
     entityType: "Note",
     entityId: note._id.toString(),
-    metadata: { collaborator: email, accessLevel, inviteId: invite._id?.toString?.() || invite._id },
+    metadata: {
+      collaborator: email,
+      accessLevel: storedAccessLevel,
+      inviteId: invite._id?.toString?.() || invite._id,
+    },
     req,
   });
 
@@ -459,7 +776,8 @@ const shareNote = asyncHandler(async (req, res) => {
     invite: {
       id: invite._id?.toString?.() || invite._id,
       email,
-      accessLevel,
+      accessLevel: displayAccessLevel,
+      permission: getNotePermissionSlug(storedAccessLevel),
       status: "pending",
       invitedAt: invite.createdAt,
       expiresAt: invite.expiresAt,
@@ -492,10 +810,8 @@ const getMyNoteInvitations = asyncHandler(async (req, res) => {
     .populate("invitedBy", "name email")
     .sort({ createdAt: -1 });
 
-  const items = invitations.filter((invite) => invite.noteId).map(formatIncomingInvite);
-
   sendResponse(res, 200, "Note invitations fetched successfully", {
-    items,
+    items: invitations.filter((invite) => invite.noteId).map(formatIncomingInvite),
   });
 });
 
@@ -554,6 +870,16 @@ const respondToNoteInvite = asyncHandler(async (req, res) => {
     await invite.save();
     await refreshCollaboratorCount(note);
 
+    await createNotification({
+      userId: note.owner?._id,
+      type: "share",
+      message: `${req.user.name} accepted access to "${note.title}"`,
+      metadata: {
+        noteId: note._id.toString(),
+        inviteId: invite._id?.toString?.() || invite._id,
+      },
+    });
+
     await createAuditLog({
       actorId: req.user._id,
       action: "permission",
@@ -570,13 +896,24 @@ const respondToNoteInvite = asyncHandler(async (req, res) => {
         id: note._id.toString(),
         title: note.title,
       },
-      accessLevel: invite.accessLevel,
+      accessLevel: getNotePermissionLabel(invite.accessLevel),
+      permission: getNotePermissionSlug(invite.accessLevel),
     });
     return;
   }
 
   invite.status = "declined";
   await invite.save();
+
+  await createNotification({
+    userId: note.owner?._id,
+    type: "share",
+    message: `${req.user.name} declined access to "${note.title}"`,
+    metadata: {
+      noteId: note._id.toString(),
+      inviteId: invite._id?.toString?.() || invite._id,
+    },
+  });
 
   await createAuditLog({
     actorId: req.user._id,
@@ -596,11 +933,7 @@ const cancelNoteInvite = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "Note identifier");
   assertObjectId(req.params.inviteId, "Invite identifier");
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
-  if (access.accessLevel !== "Owner") {
-    throw new AppError("Only the owner can manage note invitations", 403);
-  }
-
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
   const invite = await NoteInvite.findOne({
     _id: req.params.inviteId,
     noteId: req.params.id,
@@ -633,10 +966,7 @@ const removeNoteCollaborator = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "Note identifier");
   assertObjectId(req.params.userId, "Collaborator identifier");
 
-  const { note, access } = await ensureNoteAccess(req.params.id, req.user._id);
-  if (access.accessLevel !== "Owner") {
-    throw new AppError("Only the owner can remove collaborators", 403);
-  }
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
 
   if (req.params.userId === req.user._id.toString()) {
     throw new AppError("You cannot remove the note owner", 400);
@@ -652,7 +982,7 @@ const removeNoteCollaborator = asyncHandler(async (req, res) => {
     throw new AppError("Collaborator not found", 404);
   }
 
-  if (collaboratorAccess.accessLevel === "Owner") {
+  if (isNoteOwnerPermission(collaboratorAccess.accessLevel)) {
     throw new AppError("You cannot remove the note owner", 400);
   }
 
@@ -674,6 +1004,15 @@ const removeNoteCollaborator = asyncHandler(async (req, res) => {
 
   await refreshCollaboratorCount(note);
 
+  await createNotification({
+    userId: collaborator._id,
+    type: "share",
+    message: `${req.user.name} removed your access to "${note.title}"`,
+    metadata: {
+      noteId: note._id.toString(),
+    },
+  });
+
   await createAuditLog({
     actorId: req.user._id,
     action: "permission",
@@ -688,16 +1027,145 @@ const removeNoteCollaborator = asyncHandler(async (req, res) => {
   sendResponse(res, 200, "Collaborator removed successfully", null);
 });
 
+const getNoteShareLink = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id, "Note identifier");
+
+  await ensureOwnerAccess(req.params.id, req.user._id);
+  const shareLink = await NoteShareLink.findOne({ noteId: req.params.id });
+
+  sendResponse(res, 200, "Share link fetched successfully", formatShareLink(shareLink));
+});
+
+const upsertNoteShareLink = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id, "Note identifier");
+
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
+  const { visibility, expiresAt, regenerate } = sanitizeShareLinkInput(req.body);
+  const existingLink = await NoteShareLink.findOne({ noteId: req.params.id });
+  const token = regenerate || !existingLink ? crypto.randomBytes(24).toString("hex") : existingLink.token;
+
+  const shareLink = await NoteShareLink.findOneAndUpdate(
+    { noteId: req.params.id },
+    {
+      noteId: req.params.id,
+      createdBy: req.user._id,
+      token,
+      visibility,
+      expiresAt,
+      isActive: true,
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  await createAuditLog({
+    actorId: req.user._id,
+    action: "permission",
+    summary: `${req.user.name} updated a share link`,
+    target: note.title,
+    entityType: "Note",
+    entityId: note._id.toString(),
+    metadata: { visibility, expiresAt: expiresAt?.toISOString?.() || null },
+    req,
+  });
+
+  sendResponse(res, 200, "Share link saved successfully", formatShareLink(shareLink));
+});
+
+const revokeNoteShareLink = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id, "Note identifier");
+
+  const { note } = await ensureOwnerAccess(req.params.id, req.user._id);
+  const shareLink = await NoteShareLink.findOne({ noteId: req.params.id });
+
+  if (!shareLink) {
+    throw new AppError("Share link not found", 404);
+  }
+
+  shareLink.isActive = false;
+  await shareLink.save();
+
+  await createAuditLog({
+    actorId: req.user._id,
+    action: "permission",
+    summary: `${req.user.name} revoked a share link`,
+    target: note.title,
+    entityType: "Note",
+    entityId: note._id.toString(),
+    req,
+  });
+
+  sendResponse(res, 200, "Share link revoked successfully", null);
+});
+
+const getSharedNoteByToken = asyncHandler(async (req, res) => {
+  const token = sanitizeText(req.params.token, {
+    field: "Share link token",
+    minLength: 16,
+    maxLength: 128,
+  });
+
+  const shareLink = await NoteShareLink.findOne({
+    token,
+    isActive: true,
+  }).populate({
+    path: "noteId",
+    populate: {
+      path: "owner",
+      select: "name email",
+    },
+  });
+
+  if (!shareLink || !shareLink.noteId) {
+    throw new AppError("Shared note not found", 404);
+  }
+
+  if (shareLink.expiresAt && shareLink.expiresAt.getTime() <= Date.now()) {
+    shareLink.isActive = false;
+    await shareLink.save();
+    throw new AppError("This share link has expired", 410);
+  }
+
+  if (shareLink.visibility === "private" && !req.user) {
+    throw new AppError("Sign in to access this shared note", 401);
+  }
+
+  if (shareLink.visibility === "private") {
+    const authorizedAccess = await NoteAccess.findOne({
+      noteId: shareLink.noteId._id,
+      userId: req.user._id,
+    });
+
+    if (!authorizedAccess) {
+      throw new AppError("You do not have access to this shared note", 403);
+    }
+  }
+
+  shareLink.lastAccessedAt = new Date();
+  shareLink.accessCount = (shareLink.accessCount || 0) + 1;
+  await shareLink.save();
+
+  sendResponse(res, 200, "Shared note fetched successfully", {
+    note: formatNote(shareLink.noteId, "Read Only"),
+    shareLink: formatShareLink(shareLink),
+  });
+});
+
 module.exports = {
   getNotes,
   createNote,
   getNoteById,
   updateNote,
   deleteNote,
+  getNoteVersions,
+  restoreNoteVersion,
   getNoteSharing,
   shareNote,
   getMyNoteInvitations,
   respondToNoteInvite,
   cancelNoteInvite,
   removeNoteCollaborator,
+  getNoteShareLink,
+  upsertNoteShareLink,
+  revokeNoteShareLink,
+  getSharedNoteByToken,
 };

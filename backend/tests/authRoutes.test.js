@@ -67,9 +67,8 @@ describe("auth routes", () => {
   });
 
   it("registers the first user as an administrator", async () => {
-    const newUser = buildUser({ role: "Admin" });
+    const newUser = buildUser({ role: "User" });
     User.findOne.mockResolvedValue(null);
-    User.countDocuments.mockResolvedValue(0);
     User.create.mockResolvedValue(newUser);
 
     const response = await request(app).post("/api/auth/register").send({
@@ -81,13 +80,13 @@ describe("auth routes", () => {
     expect(response.status).toBe(201);
     expect(User.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        role: "Admin",
+        role: "User",
         email: "alice@example.com",
       })
     );
     expect(newUser.save).toHaveBeenCalled();
     expect(generateToken).toHaveBeenCalledWith(newUser._id);
-    expect(response.body.data.user.role).toBe("Admin");
+    expect(response.body.data.user.role).toBe("User");
   });
 
   it("rejects weak registration passwords", async () => {

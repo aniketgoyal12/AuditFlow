@@ -117,9 +117,17 @@ export const api = {
   updateNote: (id, body, token) =>
     apiRequest(`/notes/${id}`, { method: 'PUT', body: JSON.stringify(body) }, token),
   deleteNote: (id, token) => apiRequest(`/notes/${id}`, { method: 'DELETE' }, token),
+  getNoteVersions: (id, token) => apiRequest(`/notes/${id}/versions`, {}, token),
+  restoreNoteVersion: (noteId, versionId, token) =>
+    apiRequest(`/notes/${noteId}/versions/${versionId}/restore`, { method: 'POST' }, token),
   getNoteSharing: (id, token) => apiRequest(`/notes/${id}/sharing`, {}, token),
   shareNote: (id, body, token) =>
     apiRequest(`/notes/${id}/share`, { method: 'POST', body: JSON.stringify(body) }, token),
+  getNoteShareLink: (id, token) => apiRequest(`/notes/${id}/share-link`, {}, token),
+  saveNoteShareLink: (id, body, token) =>
+    apiRequest(`/notes/${id}/share-link`, { method: 'POST', body: JSON.stringify(body) }, token),
+  revokeNoteShareLink: (id, token) => apiRequest(`/notes/${id}/share-link`, { method: 'DELETE' }, token),
+  getSharedNote: (shareToken, token) => apiRequest(`/share-links/${shareToken}`, {}, token),
   getNoteInvitations: (token) => apiRequest('/notes/invitations', {}, token),
   respondToNoteInvitation: (inviteId, body, token) =>
     apiRequest(`/notes/invitations/${inviteId}/respond`, { method: 'POST', body: JSON.stringify(body) }, token),
@@ -127,6 +135,12 @@ export const api = {
     apiRequest(`/notes/${noteId}/invites/${inviteId}`, { method: 'DELETE' }, token),
   removeNoteCollaborator: (noteId, userId, token) =>
     apiRequest(`/notes/${noteId}/collaborators/${userId}`, { method: 'DELETE' }, token),
+  getNotifications: (params, token) =>
+    apiRequest(`/notifications?${buildQueryString(params)}`, {}, token),
+  markNotificationRead: (id, token) =>
+    apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }, token),
+  markAllNotificationsRead: (token) =>
+    apiRequest('/notifications/read-all', { method: 'PATCH' }, token),
   getAuditLogs: (params, token) =>
     apiRequest(`/audit-logs?${buildQueryString(params)}`, {}, token),
   getAdminOverview: (token) => apiRequest('/admin/overview', {}, token),

@@ -14,6 +14,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { getHomeRouteForUser } from '../../lib/roles';
 
 const SignupPage = () => {
   const [formData, setFormData] = useState({
@@ -52,10 +53,7 @@ const SignupPage = () => {
 
       setSession({ ...response.data, rememberMe: true });
       setIsSuccess(true);
-      setTimeout(
-        () => navigate(response.data.user.role === 'Admin' ? '/admin' : '/dashboard'),
-        2000
-      );
+      setTimeout(() => navigate(getHomeRouteForUser(response.data.user)), 2000);
     } catch (apiError) {
       setError(apiError.message);
     } finally {

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Avatar from '../common/Avatar';
+import { formatUserRole, isAdminUser } from '../../lib/roles';
 
 const platformLinks = [
   { name: 'Platform Dashboard', path: '/admin', icon: Globe },
@@ -30,9 +31,9 @@ const AppSidebar = ({ layoutType = 'workspace', isCollapsed = false }) => {
       { name: 'Notepad', path: '/notepad', icon: FileText },
       { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText },
       { name: 'Settings', path: '/settings', icon: Settings },
-      ...(user?.role === 'Admin' ? [{ name: 'Admin', path: '/admin', icon: Globe }] : []),
+      ...(isAdminUser(user) ? [{ name: 'Admin', path: '/admin', icon: Globe }] : []),
     ],
-    [user?.role]
+    [user]
   );
 
   const links = layoutType === 'platform' ? platformLinks : workspaceLinks;
@@ -170,7 +171,7 @@ const AppSidebar = ({ layoutType = 'workspace', isCollapsed = false }) => {
                 {user?.name || 'AuditFlow User'}
               </p>
               <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest leading-none mt-1">
-                {user?.role || 'Workspace User'}
+                {user?.role ? formatUserRole(user.role) : 'Workspace User'}
               </p>
             </div>
           )}

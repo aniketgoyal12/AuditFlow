@@ -28,11 +28,16 @@ const noteSchema = new mongoose.Schema(
     },
     collaborators: { type: Number, default: 0 },
     lastViewedAt: Date,
+    currentVersion: {
+      type: Number,
+      default: 1,
+    },
   },
   { timestamps: true }
 );
 
 noteSchema.index({ title: "text", content: "text", tags: "text" });
 noteSchema.index({ owner: 1, updatedAt: -1 });
+noteSchema.index({ updatedAt: -1 });
 
 module.exports = mongoose.model("Note", noteSchema);

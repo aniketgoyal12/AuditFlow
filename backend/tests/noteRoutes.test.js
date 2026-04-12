@@ -32,6 +32,19 @@ jest.mock("../models/NoteInvite", () => ({
   updateMany: jest.fn(),
 }));
 
+jest.mock("../models/NoteVersion", () => ({
+  create: jest.fn(),
+  find: jest.fn(),
+  findOne: jest.fn(),
+  deleteMany: jest.fn(),
+}));
+
+jest.mock("../models/NoteShareLink", () => ({
+  findOne: jest.fn(),
+  findOneAndUpdate: jest.fn(),
+  deleteOne: jest.fn(),
+}));
+
 jest.mock("../models/user", () => ({
   findById: jest.fn(),
   findOne: jest.fn(),
@@ -39,6 +52,12 @@ jest.mock("../models/user", () => ({
 
 jest.mock("../utils/auditLogger", () => ({
   createAuditLog: jest.fn().mockResolvedValue(),
+}));
+jest.mock("../utils/notificationService", () => ({
+  createNotification: jest.fn().mockResolvedValue(),
+}));
+jest.mock("../utils/email", () => ({
+  sendEmailInBackground: jest.fn(),
 }));
 jest.mock("../utils/logger", () => ({
   info: jest.fn(),
@@ -50,6 +69,8 @@ jest.mock("../utils/logger", () => ({
 const Note = require("../models/Note");
 const NoteAccess = require("../models/NoteAccess");
 const NoteInvite = require("../models/NoteInvite");
+const NoteVersion = require("../models/NoteVersion");
+const NoteShareLink = require("../models/NoteShareLink");
 const User = require("../models/user");
 const { app } = require("../app");
 
@@ -143,7 +164,7 @@ describe("note routes", () => {
     const response = await request(app)
       .post("/api/notes/607f1f77bcf86cd799439012/share")
       .set("Authorization", `Bearer ${signToken()}`)
-      .send({ email: "bob@example.com", accessLevel: "Editor" });
+      .send({ email: "bob@example.com", accessLevel: "editor" });
 
     expect(response.status).toBe(200);
     expect(NoteInvite.findOneAndUpdate).toHaveBeenCalled();
@@ -197,5 +218,76 @@ describe("note routes", () => {
     expect(invite.status).toBe("accepted");
     expect(note.collaborators).toBe(2);
     expect(response.body.data.accessLevel).toBe("Editor");
+    expect(response.body.data.permission).toBe("editor");
+  });
+
+  it("creates a new note version on update", async () => {
+    const note = {
+      _id: "607f1f77bcf86cd799439012",
+      title: "Initial title",
+      content: "Original content",
+      owner: { _id: authUser._id, name: authUser.name },
+      tags: [],
+      color: "primary",
+      collaborators: 1,
+      currentVersion: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      save: jest.fn().mockImplementation(async function save() {
+        this.updatedAt = new Date();
+        return this;
+      }),
+    };
+
+    Note.findById.mockReturnValue(buildPopulatedNoteQuery(note));
+    NoteAccess.findOne.mockResolvedValue({ accessLevel: "Editor" });
+    NoteVersion.create.mockResolvedValue({});
+
+    const response = await request(app)
+      .put("/api/notes/607f1f77bcf86cd799439012")
+      .set("Authorization", `Bearer ${signToken()}`)
+      .send({ title: "Updated title" });
+
+    expect(response.status).toBe(200);
+    expect(note.currentVersion).toBe(2);
+    expect(NoteVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noteId: note._id,
+        versionNumber: 2,
+        sourceAction: "update",
+      })
+    );
+  });
+
+  it("creates or updates a share link for the owner", async () => {
+    const note = {
+      _id: "607f1f77bcf86cd799439012",
+      title: "Shared note",
+      owner: { _id: authUser._id, name: authUser.name, email: authUser.email },
+      collaborators: 1,
+    };
+
+    Note.findById.mockReturnValue(buildPopulatedNoteQuery(note));
+    NoteAccess.findOne.mockResolvedValue({ accessLevel: "Owner" });
+    NoteShareLink.findOne.mockResolvedValue(null);
+    NoteShareLink.findOneAndUpdate.mockResolvedValue({
+      _id: "807f1f77bcf86cd799439013",
+      token: "abc123abc123abc123abc123",
+      visibility: "private",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      expiresAt: null,
+      accessCount: 0,
+    });
+
+    const response = await request(app)
+      .post("/api/notes/607f1f77bcf86cd799439012/share-link")
+      .set("Authorization", `Bearer ${signToken()}`)
+      .send({ visibility: "private", regenerate: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.visibility).toBe("private");
+    expect(response.body.data.sharePath).toMatch(/\/shared\//);
   });
 });

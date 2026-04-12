@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
+const { normalizeUserRole, USER_ROLES } = require("../utils/roles");
 
 const userSchema = new mongoose.Schema(
   {
@@ -31,8 +32,8 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["Admin", "Editor", "User"],
-      default: "User",
+      enum: USER_ROLES,
+      default: "user",
       index: true,
     },
     status: {
@@ -86,6 +87,11 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+userSchema.pre("validate", function normalizeRole(next) {
+  this.role = normalizeUserRole(this.role);
+  next();
+});
 
 userSchema.pre("save", async function save(next) {
   if (!this.isModified("password")) {

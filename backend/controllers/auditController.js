@@ -3,6 +3,7 @@ const NoteAccess = require("../models/NoteAccess");
 const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/AppError");
 const { sendResponse } = require("../utils/apiResponse");
+const { isAdminRole } = require("../utils/roles");
 const { assertObjectId, escapeRegex } = require("../utils/validators");
 
 const getAuditLogs = asyncHandler(async (req, res) => {
@@ -14,7 +15,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
 
   const query = {};
 
-  if (req.user.role !== "Admin") {
+  if (!isAdminRole(req.user.role)) {
     query.$or = [{ actor: req.user._id }];
     const accessibleNoteIds = await NoteAccess.find({ userId: req.user._id }).distinct("noteId");
     query.$or.push({ entityType: "Note", entityId: { $in: accessibleNoteIds.map(String) } });
@@ -76,7 +77,7 @@ const getAuditLogs = asyncHandler(async (req, res) => {
 const getUserLogs = asyncHandler(async (req, res) => {
   assertObjectId(req.params.userId, "User identifier");
 
-  if (req.user.role !== "Admin" && req.params.userId !== req.user._id.toString()) {
+  if (!isAdminRole(req.user.role) && req.params.userId !== req.user._id.toString()) {
     throw new AppError("Not authorized to view these audit logs", 403);
   }
 

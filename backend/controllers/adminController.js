@@ -5,8 +5,8 @@ const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/AppError");
 const { sendResponse } = require("../utils/apiResponse");
 const { createAuditLog } = require("../utils/auditLogger");
+const { isAdminRole, normalizeUserRole } = require("../utils/roles");
 const {
-  USER_ROLES,
   USER_STATUSES,
   assertObjectId,
   sanitizeEnum,
@@ -53,7 +53,7 @@ const getAdminOverview = asyncHandler(async (_req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: normalizeUserRole(user.role),
       status: user.status,
       notes: noteMap.get(user._id.toString()) || 0,
       lastActive: user.lastLoginAt || user.updatedAt,
@@ -94,7 +94,7 @@ const getAdminUsers = asyncHandler(async (_req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: normalizeUserRole(user.role),
       status: user.status,
       notes: noteMap.get(user._id.toString()) || 0,
       lastActive: user.lastLoginAt || user.updatedAt,
@@ -108,7 +108,10 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id, "User identifier");
 
   const status = req.body.status ? sanitizeEnum(req.body.status, USER_STATUSES, "Status") : undefined;
-  const role = req.body.role ? sanitizeEnum(req.body.role, USER_ROLES, "Role") : undefined;
+  if (req.body.role !== undefined) {
+    throw new AppError("User roles cannot be changed through the API. Create administrators with the seed script.", 400);
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -119,12 +122,9 @@ const updateUserStatus = asyncHandler(async (req, res) => {
     throw new AppError("Administrators cannot change their own role or status here", 400);
   }
 
-  if (
-    user.role === "Admin" &&
-    ((role && role !== "Admin") || (status && status !== "active"))
-  ) {
+  if (isAdminRole(user.role) && status && status !== "active") {
     const activeAdminCount = await User.countDocuments({
-      role: "Admin",
+      role: { $in: ["admin", "Admin"] },
       status: "active",
     });
 
@@ -137,10 +137,6 @@ const updateUserStatus = asyncHandler(async (req, res) => {
     user.status = status;
   }
 
-  if (role) {
-    user.role = role;
-  }
-
   await user.save();
 
   await createAuditLog({
@@ -150,7 +146,7 @@ const updateUserStatus = asyncHandler(async (req, res) => {
     target: user.email,
     entityType: "User",
     entityId: user._id.toString(),
-    metadata: { status: user.status, role: user.role },
+    metadata: { status: user.status, role: normalizeUserRole(user.role) },
     req,
   });
 
@@ -158,7 +154,7 @@ const updateUserStatus = asyncHandler(async (req, res) => {
     id: user._id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     status: user.status,
   });
 });

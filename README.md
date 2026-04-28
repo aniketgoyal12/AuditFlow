@@ -32,3 +32,5 @@ auditflow-frontend/
 cd auditflow-frontend
 npm install
 npm run dev
+database used is mongodb
+
